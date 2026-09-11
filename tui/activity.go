@@ -42,7 +42,7 @@ type activityView struct {
 func (m *Model) renderActivityView() string {
 	if m.errMsg != "" {
 		return lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#f44")).
+			Foreground(lipgloss.Color(colorStatusError)).
 			Render("Error: " + m.errMsg)
 	}
 
@@ -58,7 +58,7 @@ func (m *Model) renderActivityContent() string {
 	if len(m.inflight) > 0 {
 		b.WriteString(lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("#F80")).
+			Foreground(lipgloss.Color(colorAccentMuted)).
 			Render("  In-flight Requests:") + "\n")
 		for _, req := range m.inflight {
 			agent := "-"
@@ -100,7 +100,7 @@ func (m *Model) renderActivityContent() string {
 			if i == m.selected {
 				line = lipgloss.NewStyle().
 					Bold(true).
-					Background(lipgloss.Color("#444")).
+					Background(lipgloss.Color(colorHighlight)).
 					Render(line)
 			}
 			b.WriteString(line + "\n")
@@ -110,7 +110,7 @@ func (m *Model) renderActivityContent() string {
 	// Pagination footer
 	if m.totalPages > 1 {
 		pager := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#888")).
+			Foreground(lipgloss.Color(colorTextSecondary)).
 			Render(fmt.Sprintf("  Page %d/%d  (j/k: scroll, /: filter, ←/→: h-scroll)", m.pageNum, m.totalPages))
 		b.WriteString(pager)
 	}
@@ -153,7 +153,7 @@ func (m *Model) renderActivityStats() string {
 		return "  Waiting for activity data..."
 	}
 	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#aaa")).
+		Foreground(lipgloss.Color(colorTextTertiary)).
 		Render(fmt.Sprintf(
 			"  Requests: %-8d  Input: %-10d  Output: %-10d  Cache: %-10d",
 			s.TotalRequests,
@@ -168,23 +168,23 @@ func (m *Model) renderActivityHeader() string {
 	header := "  ID       Time       Model                  Status Cached    In        Out       P/s      D/s      Duration Path"
 	sepW := len(header)
 	sep := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#444")).
+		Foreground(lipgloss.Color(colorBorder)).
 		Render(strings.Repeat("-", sepW-2))
 	return lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("#0BB")).
+		Foreground(lipgloss.Color(colorAccent)).
 		Render(header) + "\n" + sep + "\n"
 }
 
 func (m *Model) renderActivityRow(entry api.ActivityLogEntry, idx int) string {
-	statusColor := "#0F0"
+	statusColor := colorStatusReady
 	switch {
 	case entry.RespStatusCode >= 500:
-		statusColor = "#F44"
+		statusColor = colorStatusError
 	case entry.RespStatusCode >= 400:
-		statusColor = "#F80"
+		statusColor = colorStatusWarning
 	case entry.RespStatusCode >= 300:
-		statusColor = "#FF0"
+		statusColor = colorStatusStarting
 	}
 
 	statusStr := lipgloss.NewStyle().Foreground(lipgloss.Color(statusColor)).Render(fmt.Sprintf("%d", entry.RespStatusCode))

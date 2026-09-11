@@ -32,7 +32,7 @@ type modelsView struct {
 func (m *Model) renderModelsView() string {
 	if m.errMsg != "" {
 		return lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#f44")).
+			Foreground(lipgloss.Color(colorStatusError)).
 			Render("Error: " + m.errMsg)
 	}
 
@@ -81,7 +81,7 @@ func (m *Model) renderModelList(width int) string {
 	// Status message
 	if m.statusMsg != "" && time.Since(m.statusTime) < 5*time.Second {
 		b.WriteString(lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FF0")).
+			Foreground(lipgloss.Color(colorLoading)).
 			Render(m.statusMsg) + "\n")
 	}
 
@@ -101,7 +101,7 @@ func (m *Model) renderModelList(width int) string {
 	header := fmt.Sprintf("  %-*s %-*s %-*s %s", nameW, "Name", stateW, "State", stratW, "Strategy", strings.Repeat("-", descW))
 	b.WriteString(lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("#0BB")).
+		Foreground(lipgloss.Color(colorAccent)).
 		Render(header) + "\n")
 
 	// Model rows
@@ -119,7 +119,7 @@ func (m *Model) renderModelList(width int) string {
 		b.WriteString("\n")
 		b.WriteString(lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("#F80")).
+			Foreground(lipgloss.Color(colorAccentMuted)).
 			Render("  In-flight:") + "\n")
 		idW2 := 10
 		modelW2 := 15
@@ -141,7 +141,7 @@ func (m *Model) renderModelList(width int) string {
 	// Footer hint
 	if len(m.models) > 0 {
 		hint := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#666")).
+			Foreground(lipgloss.Color(colorTextTertiary)).
 			Render("(j/k: nav  l:load  u:unload  x:cancel)")
 		b.WriteString(hint)
 	}
@@ -162,25 +162,25 @@ func (m *Model) renderModelDetail(width int) string {
 	// Model info header
 	b.WriteString(lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("#0BB")).
+		Foreground(lipgloss.Color(colorAccent)).
 		Render("  " + modelName(model)) + "\n")
 	b.WriteString(lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#444")).
+		Foreground(lipgloss.Color(colorBorder)).
 		Render("  " + strings.Repeat("-", width-4)) + "\n")
 
 	// Model details
-	stateColor := "#888"
+	stateColor := colorStatusStopped
 	switch model.State {
 	case api.ModelReady:
-		stateColor = "#0F0"
+		stateColor = colorStatusReady
 	case api.ModelStarting:
-		stateColor = "#FF0"
+		stateColor = colorStatusStarting
 	case api.ModelStopping:
-		stateColor = "#F80"
+		stateColor = colorStatusStopping
 	case api.ModelStopped:
-		stateColor = "#666"
+		stateColor = colorStatusStopped
 	case api.ModelShutdown:
-		stateColor = "#F44"
+		stateColor = colorStatusError
 	}
 
 	b.WriteString(fmt.Sprintf("  State:   %s\n", lipgloss.NewStyle().Foreground(lipgloss.Color(stateColor)).Render(string(model.State))))
@@ -204,10 +204,10 @@ func (m *Model) renderModelDetail(width int) string {
 	b.WriteString("\n")
 	b.WriteString(lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("#0BB")).
+		Foreground(lipgloss.Color(colorAccent)).
 		Render("  Activity") + "\n")
 	b.WriteString(lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#444")).
+		Foreground(lipgloss.Color(colorBorder)).
 		Render("  " + strings.Repeat("-", width-4)) + "\n")
 
 	// Stats
@@ -235,24 +235,24 @@ func (m *Model) renderModelDetail(width int) string {
 }
 
 func (m *Model) renderModelRow(model api.Model, idx int) string {
-	stateColor := "#888"
+	stateColor := colorStatusStopped
 	switch model.State {
 	case api.ModelReady:
-		stateColor = "#0F0"
+		stateColor = colorStatusReady
 	case api.ModelStarting:
-		stateColor = "#FF0"
+		stateColor = colorStatusStarting
 	case api.ModelStopping:
-		stateColor = "#F80"
+		stateColor = colorStatusStopping
 	case api.ModelStopped:
-		stateColor = "#666"
+		stateColor = colorStatusStopped
 	case api.ModelShutdown:
-		stateColor = "#F44"
+		stateColor = colorStatusError
 	}
 
 	stateStr := string(model.State)
 	if m.loading[modelName(model)] {
 		stateStr = "loading..."
-		stateColor = "#FF0"
+		stateColor = colorLoading
 	}
 
 	strategy := "-"
@@ -277,24 +277,24 @@ func (m *Model) renderModelRow(model api.Model, idx int) string {
 }
 
 func (m *Model) renderModelRowCompact(model api.Model, idx int, nameW, stateW, stratW, descW int) string {
-	stateColor := "#888"
+	stateColor := colorStatusStopped
 	switch model.State {
 	case api.ModelReady:
-		stateColor = "#0F0"
+		stateColor = colorStatusReady
 	case api.ModelStarting:
-		stateColor = "#FF0"
+		stateColor = colorStatusStarting
 	case api.ModelStopping:
-		stateColor = "#F80"
+		stateColor = colorStatusStopping
 	case api.ModelStopped:
-		stateColor = "#666"
+		stateColor = colorStatusStopped
 	case api.ModelShutdown:
-		stateColor = "#F44"
+		stateColor = colorStatusError
 	}
 
 	stateStr := string(model.State)
 	if m.loading[modelName(model)] {
 		stateStr = "loading..."
-		stateColor = "#FF0"
+		stateColor = colorLoading
 	}
 
 	strategy := "-"
@@ -311,21 +311,21 @@ func (m *Model) renderModelRowCompact(model api.Model, idx int, nameW, stateW, s
 	if idx == m.selected {
 		line = lipgloss.NewStyle().
 			Bold(true).
-			Background(lipgloss.Color("#444")).
+			Background(lipgloss.Color(colorHighlight)).
 			Render(line)
 	}
 	return line
 }
 
 func (m *Model) renderModelActivityRow(entry api.ActivityLogEntry, width int) string {
-	statusColor := "#0F0"
+	statusColor := colorStatusReady
 	switch {
 	case entry.RespStatusCode >= 500:
-		statusColor = "#F44"
+		statusColor = colorStatusError
 	case entry.RespStatusCode >= 400:
-		statusColor = "#F80"
+		statusColor = colorStatusWarning
 	case entry.RespStatusCode >= 300:
-		statusColor = "#FF0"
+		statusColor = colorStatusStarting
 	}
 
 	// Compact layout for right pane

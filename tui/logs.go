@@ -42,10 +42,10 @@ func (m *Model) renderLogsContent() string {
 	// Source filter indicator
 	b.WriteString(lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("#0BB")).
+		Foreground(lipgloss.Color(colorAccent)).
 		Render("  Logs") + "  " +
 		lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#888")).
+			Foreground(lipgloss.Color(colorTextSecondary)).
 			Render(fmt.Sprintf("(filter: %s)", m.logFilter.String())))
 	b.WriteString("\n")
 
@@ -68,12 +68,12 @@ func (m *Model) renderLogsContent() string {
 	for i := start; i < len(m.logLines); i++ {
 		line := m.logLines[i]
 		// Color-code by source prefix [proxy] or [upstream]
-		sourceColor := "#888"
+		sourceColor := colorTextSecondary
 		if strings.HasPrefix(line, "[proxy]") {
-			sourceColor = "#0BB"
+			sourceColor = colorInfo
 			line = "[proxy] " + strings.TrimPrefix(line, "[proxy] ")
 		} else if strings.HasPrefix(line, "[upstream]") {
-			sourceColor = "#0F0"
+			sourceColor = colorStatusReady
 			line = "[upstream] " + strings.TrimPrefix(line, "[upstream] ")
 		}
 
