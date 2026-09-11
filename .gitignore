@@ -1,0 +1,7 @@
+# Go build binary
+llama-swap-tui
+*.exe
+
+# Go test/cache artifacts
+*.test
+*.out
