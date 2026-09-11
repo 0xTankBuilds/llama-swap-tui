@@ -341,7 +341,7 @@ func (m *Model) View() string {
 	if m.errMsg != "" {
 		b.WriteString("\n")
 		b.WriteString(lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#f44")).
+			Foreground(lipgloss.Color(colorStatusError)).
 			Render("Error: " + m.errMsg))
 	}
 
@@ -783,63 +783,56 @@ func (m *Model) handleResize(msg tea.WindowSizeMsg) {
 func (m *Model) renderTitle() string {
 	return lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("#0BB")).
+		Foreground(lipgloss.Color(colorAccent)).
 		Render(" llama-swap-tui ") +
 		lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#888")).
+			Foreground(lipgloss.Color(colorTextSecondary)).
 			Render(fmt.Sprintf("[%s]", m.client.BaseURL))
 }
 
 func (m *Model) renderTabs() string {
-	// Fixed tab width for consistent alignment
-	tabW := 12
+	// Box-drawing tab bar with active tab highlight
+	var topLine, botLine strings.Builder
+	topLine.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(colorBorder)).Render("╭" + strings.Repeat("─", tabWidth*int(tabCount)+int(tabCount)-1) + "╮"))
 
-	// Build top/border line and each tab line
-	var topLine, midLine, botLine strings.Builder
-	topLine.WriteString("╭")
-	midLine.WriteString("│")
-	botLine.WriteString("╰")
-
+	var rows []string
 	for i := 0; i < int(tabCount); i++ {
 		label := tab(i).String()
-		topLine.WriteString(strings.Repeat("─", tabW))
-		botLine.WriteString(strings.Repeat("─", tabW))
-
 		if i == int(m.tab) {
-			midLine.WriteString(lipgloss.NewStyle().
+			rows = append(rows, lipgloss.NewStyle().
+				Background(lipgloss.Color(colorHighlight)).
+				Foreground(lipgloss.Color(colorAccent)).
 				Bold(true).
-				Foreground(lipgloss.Color("#0BB")).
-				Width(tabW).
+				Width(tabWidth).
 				Align(lipgloss.Center).
 				Render(label))
 		} else {
-			midLine.WriteString(lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#888")).
-				Width(tabW).
+			rows = append(rows, lipgloss.NewStyle().
+				Foreground(lipgloss.Color(colorTextSecondary)).
+				Width(tabWidth).
 				Align(lipgloss.Center).
 				Render(label))
 		}
-
-		if i < int(tabCount)-1 {
-			topLine.WriteString("┬")
-			midLine.WriteString("│")
-			botLine.WriteString("┴")
-		}
 	}
-	topLine.WriteString("╮")
-	midLine.WriteString("│")
-	botLine.WriteString("╯")
 
-	return topLine.String() + "\n" + midLine.String() + "\n" + botLine.String()
+	midLine := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(colorBorder)).
+		Render(tabBorderChar) +
+		strings.Join(rows, lipgloss.NewStyle().Foreground(lipgloss.Color(colorBorder)).Render(tabBorderChar)) +
+		lipgloss.NewStyle().Foreground(lipgloss.Color(colorBorder)).Render(tabBorderChar)
+
+	botLine.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(colorBorder)).Render("╰" + strings.Repeat("─", tabWidth*int(tabCount)+int(tabCount)-1) + "╯"))
+
+	return topLine.String() + "\n" + midLine + "\n" + botLine.String()
 }
 
 func (m *Model) renderStatusBar() string {
 	status := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#0F0")).
+		Foreground(lipgloss.Color(colorStatusReady)).
 		Render("●")
 	if m.conn != connConnected {
 		status = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#F80")).
+			Foreground(lipgloss.Color(colorStatusWarning)).
 			Render("●")
 	}
 
@@ -856,12 +849,15 @@ func (m *Model) renderStatusBar() string {
 	parts = append(parts, "q", "r", "?")
 
 	bar := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#888")).
+		Foreground(lipgloss.Color(colorTextSecondary)).
 		Render(strings.Join(parts, "  |  "))
 
+	// Status bar with top border for visual separation
+	contentW := m.vp.Width - 2
+	bar = lipgloss.NewStyle().Width(contentW).Render(bar)
 	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#444")).
+		Border(lipgloss.Border{Top: separatorChar, TopLeft: "╭", TopRight: "╮"}).
+		BorderForeground(lipgloss.Color(colorBorder)).
 		Render(bar)
 }
 
@@ -869,7 +865,7 @@ func (m *Model) renderHelpOverlay() string {
 	overlay := lipgloss.NewStyle().
 		Width(60).
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#0BB")).
+		BorderForeground(lipgloss.Color(colorAccent)).
 		Render(
 			"Keyboard Shortcuts\n\n" +
 				"  q / Ctrl+C       Quit\n" +

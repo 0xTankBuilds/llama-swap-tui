@@ -28,7 +28,7 @@ type profilesView struct {
 func (m *Model) renderProfilesView() string {
 	if m.errMsg != "" {
 		return lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#f44")).
+			Foreground(lipgloss.Color(colorStatusError)).
 			Render("Error: " + m.errMsg)
 	}
 
@@ -37,7 +37,7 @@ func (m *Model) renderProfilesView() string {
 	// Status message
 	if m.statusMsg != "" && time.Since(m.statusTime) < 5*time.Second {
 		b.WriteString(lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FF0")).
+			Foreground(lipgloss.Color(colorLoading)).
 			Render("  "+m.statusMsg) + "\n")
 	}
 
@@ -50,10 +50,10 @@ func (m *Model) renderProfilesView() string {
 
 	b.WriteString(lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("#0BB")).
+		Foreground(lipgloss.Color(colorAccent)).
 		Render("  Profiles") + "\n")
 	b.WriteString(lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#444")).
+		Foreground(lipgloss.Color(colorBorder)).
 		Render("  " + strings.Repeat("-", idW+descW+4)) + "\n")
 
 	// Fetch profiles if we don't have any
@@ -66,7 +66,7 @@ func (m *Model) renderProfilesView() string {
 		active := ""
 		if profile.ID == m.activeProfile || profile.Description == m.activeProfile {
 			active = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#0F0")).
+				Foreground(lipgloss.Color(colorStatusReady)).
 				Bold(true).
 				Render(" ◉ active")
 		}
@@ -94,21 +94,21 @@ func (m *Model) renderProfilesView() string {
 		if i == m.selected {
 			line = lipgloss.NewStyle().
 				Bold(true).
-				Background(lipgloss.Color("#444")).
+				Background(lipgloss.Color(colorHighlight)).
 				Render(line)
 		}
 		b.WriteString(line + "\n")
 
 		if pins != "" && i == m.selected {
 			b.WriteString(lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#888")).
+				Foreground(lipgloss.Color(colorTextSecondary)).
 				Render("    Pins:"+pins) + "\n")
 		}
 	}
 
 	// Footer hint
 	b.WriteString(lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#666")).
+		Foreground(lipgloss.Color(colorTextTertiary)).
 		Render("  (j/k: navigate, enter: switch profile)"))
 
 	return b.String()

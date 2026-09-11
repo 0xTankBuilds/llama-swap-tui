@@ -26,7 +26,7 @@ type hardwareView struct {
 func (m *Model) renderHardwareView() string {
 	if m.errMsg != "" {
 		return lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#f44")).
+			Foreground(lipgloss.Color(colorStatusError)).
 			Render("Error: " + m.errMsg)
 	}
 
@@ -54,10 +54,10 @@ func (m *Model) renderSystemInfo() string {
 	var b strings.Builder
 	b.WriteString(lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("#0BB")).
+		Foreground(lipgloss.Color(colorAccent)).
 		Render("  System Information") + "\n")
 	b.WriteString(lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#444")).
+		Foreground(lipgloss.Color(colorBorder)).
 		Render("  " + strings.Repeat("-", 40)) + "\n")
 
 	arch := m.hardware.Architecture.Name
@@ -96,10 +96,10 @@ func (m *Model) renderCPUSection() string {
 	b.WriteString("\n")
 	b.WriteString(lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("#0BB")).
+		Foreground(lipgloss.Color(colorAccent)).
 		Render("  CPU") + "\n")
 	b.WriteString(lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#444")).
+		Foreground(lipgloss.Color(colorBorder)).
 		Render("  " + strings.Repeat("-", barW+12)) + "\n")
 
 	if m.hardware.CPU.Model == nil {
@@ -138,11 +138,11 @@ func (m *Model) renderCPUSection() string {
 		for i := 0; i < maxBars; i++ {
 			pct := m.sysStat.CPUUtilPerCore[i]
 			bars := int(pct / 100.0 * float64(barW))
-			color := "#0F0"
+			color := colorStatusReady
 			if pct > 80 {
-				color = "#F44"
+				color = colorStatusError
 			} else if pct > 50 {
-				color = "#FF0"
+				color = colorStatusStarting
 			}
 			b.WriteString(fmt.Sprintf("    Core %-4d [", i) +
 				strings.Repeat("█", bars) +
@@ -167,10 +167,10 @@ func (m *Model) renderMemorySection() string {
 	b.WriteString("\n")
 	b.WriteString(lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("#0BB")).
+		Foreground(lipgloss.Color(colorAccent)).
 		Render("  Memory") + "\n")
 	b.WriteString(lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#444")).
+		Foreground(lipgloss.Color(colorBorder)).
 		Render("  " + strings.Repeat("-", barW+12)) + "\n")
 
 	totalMB := m.hardware.Memory.CapacityBytes >> 20
@@ -186,11 +186,11 @@ func (m *Model) renderMemorySection() string {
 
 		// Memory bar
 		bars := int(usedPct / 100.0 * float64(barW))
-		color := "#0F0"
+		color := colorStatusReady
 		if usedPct > 90 {
-			color = "#F44"
+			color = colorStatusError
 		} else if usedPct > 70 {
-			color = "#FF0"
+			color = colorStatusStarting
 		}
 		b.WriteString("    [" + strings.Repeat("█", bars) +
 			strings.Repeat(" ", barW-bars) +
@@ -202,11 +202,11 @@ func (m *Model) renderMemorySection() string {
 			b.WriteString(fmt.Sprintf("  Swap: %d MB / %d MB (%.1f%%)\n",
 				m.sysStat.SwapUsedMB, m.sysStat.SwapTotalMB, swapPct))
 			sbars := int(swapPct / 100.0 * float64(barW))
-			scolor := "#0F0"
+			scolor := colorStatusReady
 			if swapPct > 80 {
-				scolor = "#F44"
+				scolor = colorStatusError
 			} else if swapPct > 50 {
-				scolor = "#FF0"
+				scolor = colorStatusStarting
 			}
 			b.WriteString("    [" + strings.Repeat("█", sbars) +
 				strings.Repeat(" ", barW-sbars) +
@@ -242,10 +242,10 @@ func (m *Model) renderGPUSection() string {
 	b.WriteString("\n")
 	b.WriteString(lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("#0BB")).
+		Foreground(lipgloss.Color(colorAccent)).
 		Render("  Accelerators") + "\n")
 	b.WriteString(lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#444")).
+		Foreground(lipgloss.Color(colorBorder)).
 		Render("  " + strings.Repeat("-", 40)) + "\n")
 
 	if len(m.hardware.Accelerators) == 0 {
@@ -292,10 +292,10 @@ func (m *Model) renderLivePerf() string {
 	b.WriteString("\n")
 	b.WriteString(lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("#0BB")).
+		Foreground(lipgloss.Color(colorAccent)).
 		Render("  Live GPU Performance (SSE)") + "\n")
 	b.WriteString(lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#444")).
+		Foreground(lipgloss.Color(colorBorder)).
 		Render("  " + strings.Repeat("-", barW+12)) + "\n")
 
 	if m.gpuStat == nil {
@@ -314,11 +314,11 @@ func (m *Model) renderLivePerf() string {
 
 	// GPU utilization bar
 	gutilBars := int(gs.GpuUtilPct / 100.0 * float64(barW))
-	gutilColor := "#0F0"
+	gutilColor := colorStatusReady
 	if gs.GpuUtilPct > 80 {
-		gutilColor = "#F44"
+		gutilColor = colorStatusError
 	} else if gs.GpuUtilPct > 50 {
-		gutilColor = "#FF0"
+		gutilColor = colorStatusStarting
 	}
 	b.WriteString(fmt.Sprintf("  GPU Util: [%s%s] %s\n",
 		strings.Repeat("█", gutilBars),
@@ -328,11 +328,11 @@ func (m *Model) renderLivePerf() string {
 
 	// VRAM bar
 	vramBars := int(memPct / 100.0 * float64(barW))
-	vramColor := "#0F0"
+	vramColor := colorStatusReady
 	if memPct > 90 {
-		vramColor = "#F44"
+		vramColor = colorStatusError
 	} else if memPct > 70 {
-		vramColor = "#FF0"
+		vramColor = colorStatusStarting
 	}
 	b.WriteString(fmt.Sprintf("  VRAM:   [%s%s] %s\n",
 		strings.Repeat("█", vramBars),
