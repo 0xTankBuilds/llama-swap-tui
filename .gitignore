@@ -5,3 +5,38 @@ llama-swap-tui
 # Go test/cache artifacts
 *.test
 *.out
+
+# Environment
+.env
+.env.*
+
+# IDE / Agent metadata
+.omc/
+.claude/
+
+# Project docs with personal context
+HANDOVER.md
+CLAUDE.md
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# Node / Frontend
+node_modules/
+.svelte-kit/
+build/
+dist/
+
+# Test artifacts
+frontend/tests/screenshots/
+frontend/playwright-report/
+frontend/test-results/
+
+# OS
+.DS_Store
+Thumbs.db
