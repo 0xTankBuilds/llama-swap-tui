@@ -216,17 +216,19 @@ func (m *Model) renderActivityRow(entry api.ActivityLogEntry, idx int) string {
 // ---------------------------------------------------------------------------
 
 func (m *Model) activityScrollDown() {
-	if m.selected < len(m.activityPage.Data)-1 {
-		m.selected++
-		m.vp.LineDown(1)
+	if len(m.activityPage.Data) == 0 || m.selected < 0 || m.selected >= len(m.activityPage.Data)-1 {
+		return
 	}
+	m.selected++
+	m.vp.LineDown(1)
 }
 
 func (m *Model) activityScrollUp() {
-	if m.selected > 0 {
-		m.selected--
-		m.vp.LineUp(1)
+	if len(m.activityPage.Data) == 0 || m.selected < 1 {
+		return
 	}
+	m.selected--
+	m.vp.LineUp(1)
 }
 
 func (m *Model) activityNextPage() tea.Cmd {

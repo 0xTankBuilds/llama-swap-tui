@@ -12,6 +12,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -116,6 +117,7 @@ type keyMap struct {
 	NextTab       key.Binding
 	PrevTab       key.Binding
 	LoadModel     key.Binding
+	LoadModelByName key.Binding
 	UnloadModel   key.Binding
 	CancelReq     key.Binding
 	SwitchProfile key.Binding
@@ -130,7 +132,7 @@ func (k keyMap) ShortHelp() []key.Binding {
 func (k keyMap) FullHelp() []key.Binding {
 	return []key.Binding{
 		k.NextTab, k.PrevTab,
-		k.LoadModel, k.UnloadModel, k.CancelReq, k.SwitchProfile,
+		k.LoadModel, k.LoadModelByName, k.UnloadModel, k.CancelReq, k.SwitchProfile,
 		k.ScrollDown, k.ScrollUp,
 		k.Quit, k.Refresh, k.Help,
 	}
@@ -140,9 +142,10 @@ var keys = keyMap{
 	Quit:          key.NewBinding(key.WithKeys("q", "ctrl+c")),
 	Refresh:       key.NewBinding(key.WithKeys("r")),
 	Help:          key.NewBinding(key.WithKeys("?")),
-	NextTab:       key.NewBinding(key.WithKeys("tab", "shift+tab", "l", "n", "1", "2", "3", "4", "5")),
+	NextTab:       key.NewBinding(key.WithKeys("tab", "shift+tab", "n", "1", "2", "3", "4", "5")),
 	PrevTab:       key.NewBinding(key.WithKeys("h", "p")),
 	LoadModel:     key.NewBinding(key.WithKeys("l")),
+	LoadModelByName: key.NewBinding(key.WithKeys("L")),
 	UnloadModel:   key.NewBinding(key.WithKeys("u")),
 	CancelReq:     key.NewBinding(key.WithKeys("x")),
 	SwitchProfile: key.NewBinding(key.WithKeys("enter")),
@@ -214,6 +217,10 @@ type Model struct {
 	// Error display
 	errMsg string
 
+	// Model load input prompt
+	loadModelInput textinput.Model
+	loadModelMode  bool // true when input prompt is active
+
 	// Done channel for SSE goroutine
 	done chan struct{}
 }
@@ -230,6 +237,12 @@ func NewModel(client *api.Client, version string) *Model {
 		appVersion: version,
 	}
 	m.vp = viewport.New(80, 24)
+	m.loading = make(map[string]bool)
+	m.loadModelInput = textinput.New()
+	m.loadModelInput.Placeholder = "model name"
+	m.loadModelInput.Prompt = "> "
+	m.loadModelInput.PlaceholderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorTextTertiary))
+	m.loadModelInput.Focus()
 	return m
 }
 
@@ -241,7 +254,14 @@ func (m *Model) SetProgram(p *tea.Program) {
 // Init implements tea.Model.
 func (m *Model) Init() tea.Cmd {
 	m.startSSE()
-	return nil
+	// Fetch initial data so content is visible as soon as the TUI opens.
+	return tea.Batch(
+		m.fetchVersion(),
+		m.fetchModels(),
+		m.fetchActivity(),
+		m.fetchProfiles(),
+		m.fetchHardware(),
+	)
 }
 
 // Update implements tea.Model.
@@ -361,15 +381,6 @@ func (m *Model) startSSE() {
 	m.sse.Start(context.Background())
 
 	go m.sseReader()
-
-	// Fetch initial data once connected
-	go func() {
-		time.Sleep(500 * time.Millisecond)
-		m.fetchVersion()
-		m.fetchProfiles()
-		m.fetchModels()
-		m.fetchActivity()
-	}()
 }
 
 func (m *Model) sseReader() {
@@ -408,14 +419,16 @@ func (m *Model) closeSSE() {
 // REST fetchers
 // ---------------------------------------------------------------------------
 
-func (m *Model) fetchVersion() tea.Msg {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	v, err := m.client.GetVersion(ctx)
-	if err == nil {
-		m.version = *v
+func (m *Model) fetchVersion() tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		v, err := m.client.GetVersion(ctx)
+		if err == nil {
+			m.version = *v
+		}
+		return nil
 	}
-	return nil
 }
 
 func (m *Model) fetchActivity() tea.Cmd {
@@ -462,14 +475,20 @@ func (m *Model) fetchModels() tea.Cmd {
 			return fmt.Errorf("fetch models: %w", err)
 		}
 		m.models = models
-		m.selected = 0
+		m.clampSelected()
 		m.selectedModel = ""
 		m.modelActivity = api.ActivityPage{}
 		m.modelActivityStats = nil
-		if m.loading == nil {
-			m.loading = make(map[string]bool)
-		}
 		return ModelsRefreshMsg{}
+	}
+}
+
+// clampSelected ensures m.selected is within valid bounds for the current models list.
+func (m *Model) clampSelected() {
+	if len(m.models) == 0 {
+		m.selected = 0
+	} else if m.selected >= len(m.models) {
+		m.selected = len(m.models) - 1
 	}
 }
 
@@ -547,6 +566,7 @@ func (m *Model) handleSSE(msg SSEMsg) (tea.Model, tea.Cmd) {
 		var models []api.Model
 		if err := json.Unmarshal([]byte(msg.Data), &models); err == nil {
 			m.models = models
+			m.clampSelected()
 		}
 
 	case "logData":
@@ -635,6 +655,41 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Model load input prompt takes priority when active
+	if m.loadModelMode {
+		switch msg.String() {
+		case "enter":
+			name := m.loadModelInput.Value()
+			m.loadModelMode = false
+			m.loadModelInput.Blur()
+			if name == "" {
+				return m, nil
+			}
+			m.statusMsg = fmt.Sprintf("Loading model %s...", name)
+			m.statusTime = time.Now()
+			return m, func() tea.Msg {
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				err := m.client.LoadModel(ctx, name)
+				if err != nil {
+					m.statusMsg = fmt.Sprintf("Failed to load %s: %v", name, err)
+				} else {
+					m.statusMsg = fmt.Sprintf("Loading %s initiated", name)
+				}
+				m.statusTime = time.Now()
+				return ModelsRefreshMsg{}
+			}
+		case "esc", "ctrl+c":
+			m.loadModelMode = false
+			m.loadModelInput.Blur()
+			return m, nil
+		default:
+			inputModel, cmd := m.loadModelInput.Update(msg)
+			m.loadModelInput = inputModel
+			return m, cmd
+		}
+	}
+
 	switch msg.String() {
 	case "q", "ctrl+c":
 		m.closeSSE()
@@ -668,6 +723,14 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, m.loadSelectedModel()
 		default:
 			m.tab = (m.tab + 1) % tabCount
+		}
+	case "L":
+		switch m.tab {
+		case tabModels:
+			m.loadModelMode = true
+			m.loadModelInput.Reset()
+			m.loadModelInput.Focus()
+			return m, nil
 		}
 
 	// Tab-specific navigation
@@ -874,7 +937,7 @@ func (m *Model) renderHelpOverlay() string {
 				"  1-5              Switch tabs\n" +
 				"  tab / shift+tab  Next / prev tab\n\n" +
 				"  Activity (1):  j/k scroll  pgup/pgdown pages\n" +
-				"  Models (2):    j/k navigate  l=load  u=unload  x=cancel\n" +
+				"  Models (2):    j/k navigate  l=load  L=load-by-name  u=unload  x=cancel\n" +
 				"  Hardware (3):  r refresh\n" +
 				"  Logs (4):      f cycle filter  end=scroll to bottom\n" +
 				"  Profiles (5):  j/k navigate  enter=switch",
