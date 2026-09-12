@@ -860,12 +860,12 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case tabProfiles:
 			return m, m.switchSelectedProfile()
 		}
-	case "Right":
+	case "right":
 		if m.tab == tabActivity {
 			m.hScrollOffset += 10
 		}
 		return m, nil
-	case "Left":
+	case "left":
 		if m.tab == tabActivity {
 			m.hScrollOffset = max(0, m.hScrollOffset-10)
 		}

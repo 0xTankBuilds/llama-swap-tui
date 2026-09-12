@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // ---------------------------------------------------------------------------
@@ -118,28 +119,31 @@ func (m *Model) renderActivityContent() string {
 	return b.String()
 }
 
-// applyHScroll applies horizontal scrolling to multi-line text
+// applyHScroll clips content to the viewport with horizontal scrolling.
+// Slicing is grapheme/ANSI-aware (like the bubbles viewport) so colored rows
+// and UTF-8 text stay intact, and the offset is clamped to the longest line
+// so over-scrolling can never blank the view.
 func applyHScroll(content string, offset, width int) string {
-	if offset <= 0 && width > 0 {
-		// No scroll, but still constrain to viewport width
-		var b strings.Builder
-		for _, line := range strings.Split(content, "\n") {
-			if len(line) > width {
-				b.WriteString(line[:width])
-			} else {
-				b.WriteString(line)
-			}
-			b.WriteString("\n")
-		}
-		return b.String()
+	lines := strings.Split(content, "\n")
+
+	if offset < 0 {
+		offset = 0
 	}
+	maxLen := 0
+	for _, l := range lines {
+		if w := ansi.StringWidth(l); w > maxLen {
+			maxLen = w
+		}
+	}
+	if maxOffset := max(0, maxLen-width); offset > maxOffset {
+		offset = maxOffset
+	}
+
 	var b strings.Builder
-	for _, line := range strings.Split(content, "\n") {
-		if len(line) > offset {
-			line = line[offset:]
-			if width > 0 && len(line) > width {
-				line = line[:width]
-			}
+	for _, line := range lines {
+		if width > 0 {
+			b.WriteString(ansi.Cut(line, offset, offset+width))
+		} else {
 			b.WriteString(line)
 		}
 		b.WriteString("\n")
@@ -163,13 +167,52 @@ func (m *Model) renderActivityStats() string {
 		))
 }
 
+// Table column widths for the activity view.
+const (
+	colID      = 7
+	colTime    = 9
+	colModel   = 28
+	colStatus  = 6
+	colCached  = 9
+	colIn      = 9
+	colOut     = 9
+	colPrefill = 8 // P/s — prompt tokens/sec (prefill)
+	colDecode  = 8 // D/s — generated tokens/sec (decode)
+	colDur     = 10
+)
+
+// activityFixedWidth returns the total cell width of the always-shown
+// columns plus separators, optionally including the token-count columns.
+func activityFixedWidth(withTokens bool) int {
+	w := 2 + // indent
+		colID+1 + colTime+1 + colModel+1 + colStatus+1 +
+		colPrefill+1 + colDecode+1 + colDur+1
+	if withTokens {
+		w += colCached + colIn + colOut + 3 // + 3 separators
+	}
+	return w
+}
+
+// useTokenColumns reports whether the viewport is wide enough to also show
+// the Cached/In/Out token columns. Prefill/decode (P/s/D/s) are always shown;
+// token counts are the first columns dropped on narrow terminals.
+func (m *Model) useTokenColumns() bool {
+	const minPathWidth = 12 // keep the path column readable
+	return m.vp.Width >= activityFixedWidth(true) + minPathWidth
+}
+
 func (m *Model) renderActivityHeader() string {
 	// Render full-width header (no truncation) - scrolling handles visibility
-	header := "  ID       Time       Model                  Status Cached    In        Out       P/s      D/s      Duration Path"
-	sepW := len(header)
+	header := fmt.Sprintf("  %-*s %-*s %-*s %-*s",
+		colID, "ID", colTime, "Time", colModel, "Model", colStatus, "Status")
+	if m.useTokenColumns() {
+		header += fmt.Sprintf(" %-*s %-*s %-*s", colCached, "Cached", colIn, "In", colOut, "Out")
+	}
+	header += fmt.Sprintf(" %-*s %-*s %-*s %s",
+		colPrefill, "P/s", colDecode, "D/s", colDur, "Duration", "Path")
 	sep := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorBorder)).
-		Render(strings.Repeat("-", sepW-2))
+		Render(strings.Repeat("-", ansi.StringWidth(header)))
 	return lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color(colorAccent)).
@@ -196,19 +239,20 @@ func (m *Model) renderActivityRow(entry api.ActivityLogEntry, idx int) string {
 	durStr := formatDuration(entry.DurationMs)
 
 	// Render full-width (no truncation) - scrolling handles visibility
-	return fmt.Sprintf("  %-7d %-9s %-28s %-6s %-9s %-9s %-9s %-8s %-8s %-10s %s",
-		entry.ID,
-		entry.Timestamp.Format("15:04:05"),
-		entry.Model,
-		statusStr,
-		cachedStr,
-		inStr,
-		outStr,
-		pStr,
-		dStr,
-		durStr,
-		entry.ReqPath,
-	)
+	line := fmt.Sprintf("  %-*d %-*s %-*s %-*s",
+		colID, entry.ID,
+		colTime, entry.Timestamp.Format("15:04:05"),
+		colModel, entry.Model,
+		colStatus, statusStr)
+	if m.useTokenColumns() {
+		line += fmt.Sprintf(" %-*s %-*s %-*s", colCached, cachedStr, colIn, inStr, colOut, outStr)
+	}
+	line += fmt.Sprintf(" %-*s %-*s %-*s %s",
+		colPrefill, pStr,
+		colDecode, dStr,
+		colDur, durStr,
+		entry.ReqPath)
+	return line
 }
 
 // ---------------------------------------------------------------------------
@@ -235,6 +279,7 @@ func (m *Model) activityNextPage() tea.Cmd {
 	if m.pageNum < m.totalPages {
 		m.pageNum++
 		m.selected = 0
+		m.hScrollOffset = 0
 		return m.fetchActivity()
 	}
 	return nil
@@ -244,6 +289,7 @@ func (m *Model) activityPrevPage() tea.Cmd {
 	if m.pageNum > 1 {
 		m.pageNum--
 		m.selected = 0
+		m.hScrollOffset = 0
 		return m.fetchActivity()
 	}
 	return nil
