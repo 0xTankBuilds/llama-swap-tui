@@ -20,17 +20,27 @@ A terminal UI (TUI) for [llama-swap](https://github.com/binfelipe/llama-swap) â€
 ### Activity Tab
 Shows paginated request logs with color-coded HTTP status codes, token metrics, and throughput statistics.
 
+![Activity Tab](docs/screenshots/activity.png)
+
 ### Models Tab
 Lists all models with their current state, supports loading/unloading models and cancelling in-flight requests.
+
+![Models Tab](docs/screenshots/models.png)
 
 ### Hardware Tab
 Displays system information, CPU per-core utilization, memory/swap usage, GPU details, and live GPU performance metrics.
 
+![Hardware Tab](docs/screenshots/hardware.png)
+
 ### Logs Tab
 Live streaming logs with source filtering and auto-scroll.
 
+![Logs Tab](docs/screenshots/logs.png)
+
 ### Profiles Tab
 View and switch between model pinning profiles.
+
+![Profiles Tab](docs/screenshots/profiles.png)
 
 ## Installation
 
