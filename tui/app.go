@@ -184,9 +184,10 @@ type Model struct {
 	modelActivity   api.ActivityPage
 	modelActivityStats *api.ActivityStats
 
-	// Live performance (SSE perfsys / perfgpu)
-	sysStat *api.SysStat
-	gpuStat *api.GpuStat
+	// Live performance (SSE perfsys / perfgpu + /api/performance polling)
+	sysStat    *api.SysStat
+	gpuStats   map[int]*api.GpuStat // latest per-GPU stats, keyed by GPU ID
+	perfCursor string               // last-seen performance timestamp (?after=)
 
 	// Log source filter
 	logFilter logSourceFilter
@@ -261,6 +262,7 @@ func (m *Model) Init() tea.Cmd {
 		m.fetchActivity(),
 		m.fetchProfiles(),
 		m.fetchHardware(),
+		m.fetchPerformance(),
 	)
 }
 
@@ -278,12 +280,23 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 
+	case tea.MouseMsg:
+		// Forward mouse wheel to the shared viewport so content scrolls.
+		updatedVP, cmd := m.vp.Update(msg)
+		m.vp = updatedVP
+		return m, cmd
+
 	case time.Time:
-		// Auto-refresh activity every 5s when on activity tab
+		// Auto-refresh every 5s: activity on the activity tab, and GPU/system
+		// performance always (the SSE stream does not push perfsys/perfgpu
+		// events, so /api/performance must be polled to keep stats live).
+		var cmds []tea.Cmd
 		if m.tab == tabActivity {
-			return m, tea.Batch(m.fetchActivity(), tea.Tick(5*time.Second, func(time.Time) tea.Msg { return nil }))
+			cmds = append(cmds, m.fetchActivity())
 		}
-		return m, tea.Tick(5*time.Second, func(time.Time) tea.Msg { return nil })
+		cmds = append(cmds, m.fetchPerformance())
+		cmds = append(cmds, tea.Tick(5*time.Second, func(time.Time) tea.Msg { return nil }))
+		return m, tea.Batch(cmds...)
 
 	case ShutdownMsg:
 		m.closeSSE()
@@ -468,6 +481,47 @@ func (m *Model) fetchHardware() tea.Cmd {
 	}
 }
 
+// fetchPerformance polls /api/performance, which the server appends one entry
+// per device every 5s. It seeds the latest system stats and per-GPU stats so
+// the live sections render without relying on SSE perf events.
+func (m *Model) fetchPerformance() tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		resp, err := m.client.GetPerformance(ctx, m.perfCursor)
+		if err != nil {
+			return fmt.Errorf("fetch performance: %w", err)
+		}
+
+		var lastSys, lastGpu string
+		if n := len(resp.SysStats); n > 0 {
+			m.sysStat = &resp.SysStats[n-1]
+			lastSys = resp.SysStats[n-1].Timestamp
+		}
+		if len(resp.GpuStats) > 0 {
+			if m.gpuStats == nil {
+				m.gpuStats = make(map[int]*api.GpuStat)
+			}
+			for i := range resp.GpuStats {
+				gs := resp.GpuStats[i]
+				m.gpuStats[gs.ID] = &gs
+				if gs.Timestamp > lastGpu {
+					lastGpu = gs.Timestamp
+				}
+			}
+		}
+
+		// Use the older of the two cursors so neither list falls behind.
+		if lastSys != "" && (lastGpu == "" || lastSys <= lastGpu) {
+			m.perfCursor = lastSys
+		} else if lastGpu != "" {
+			m.perfCursor = lastGpu
+		}
+
+		return HardwareRefreshMsg{}
+	}
+}
+
 func (m *Model) fetchModels() tea.Cmd {
 	return func() tea.Msg {
 		models, err := m.client.GetModels(context.Background())
@@ -635,7 +689,10 @@ func (m *Model) handleSSE(msg SSEMsg) (tea.Model, tea.Cmd) {
 		m.conn = connConnected
 		var gpuStat api.GpuStat
 		if err := json.Unmarshal([]byte(msg.Data), &gpuStat); err == nil {
-			m.gpuStat = &gpuStat
+			if m.gpuStats == nil {
+				m.gpuStats = make(map[int]*api.GpuStat)
+			}
+			m.gpuStats[gpuStat.ID] = &gpuStat
 		}
 	}
 	return m, nil
@@ -738,6 +795,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch m.tab {
 		case tabActivity:
 			return m, m.activityNextPage()
+		case tabHardware:
+			m.vp.PageDown()
 		case tabLogs:
 			m.vp.PageDown()
 		}
@@ -745,6 +804,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch m.tab {
 		case tabActivity:
 			return m, m.activityPrevPage()
+		case tabHardware:
+			m.vp.PageUp()
 		case tabLogs:
 			m.vp.PageUp()
 		}
@@ -772,6 +833,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch m.tab {
 		case tabActivity:
 			m.activityScrollDown()
+		case tabHardware:
+			m.vp.LineDown(1)
 		case tabLogs:
 			m.logScrollDown()
 		case tabModels:
@@ -783,6 +846,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch m.tab {
 		case tabActivity:
 			m.activityScrollUp()
+		case tabHardware:
+			m.vp.LineUp(1)
 		case tabLogs:
 			m.logScrollUp()
 		case tabModels:
@@ -815,7 +880,7 @@ func (m *Model) refreshCurrentTab() tea.Cmd {
 	case tabActivity:
 		return m.fetchActivity()
 	case tabHardware:
-		return m.fetchHardware()
+		return tea.Batch(m.fetchHardware(), m.fetchPerformance())
 	case tabModels:
 		return m.fetchModels()
 	case tabProfiles:
@@ -938,7 +1003,7 @@ func (m *Model) renderHelpOverlay() string {
 				"  tab / shift+tab  Next / prev tab\n\n" +
 				"  Activity (1):  j/k scroll  pgup/pgdown pages\n" +
 				"  Models (2):    j/k navigate  l=load  L=load-by-name  u=unload  x=cancel\n" +
-				"  Hardware (3):  r refresh\n" +
+				"  Hardware (3):  j/k scroll  pgup/pgdown pages  r refresh\n" +
 				"  Logs (4):      f cycle filter  end=scroll to bottom\n" +
 				"  Profiles (5):  j/k navigate  enter=switch",
 		)
