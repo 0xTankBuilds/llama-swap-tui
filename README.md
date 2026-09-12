@@ -7,12 +7,12 @@ A terminal UI (TUI) for [llama-swap](https://github.com/binfelipe/llama-swap) �
 
 ## Features
 
-- **Activity Tab** — Paginated request log with status codes, token metrics, and throughput stats
-- **Models Tab** — List all configured models with color-coded states (ready/starting/stopped/shutdown), load/unload models, and cancel in-flight requests
-- **Hardware Tab** — CPU model, core count, memory, accelerators/GPUs, per-core CPU utilization bars, memory/swap usage bars, and live GPU performance (temperature, VRAM, fan speed, power draw)
+- **Activity Tab** — Paginated request log with status codes, token metrics, and throughput stats; horizontal scrolling with adaptive columns that keep prefill/decode (P/s, D/s) visible on narrow terminals
+- **Models Tab** — List all configured models with color-coded states (ready/starting/stopped/shutdown); load models by selection or by name, unload models, and cancel in-flight requests
+- **Hardware Tab** — CPU model, core count, memory, accelerators/GPUs, per-core CPU utilization bars, memory/swap usage bars, and live multi-GPU performance (temperature, VRAM, fan speed, power draw)
 - **Logs Tab** — Live streaming logs with source filtering (All / Proxy / Upstream)
 - **Profiles Tab** — View and switch between named model pinning profiles
-- **Real-time Updates** — SSE-powered live updates for model status changes, activity, in-flight requests, hardware performance, and log events
+- **Real-time Updates** — SSE-powered live updates for model status, activity, in-flight requests, and logs; live hardware/GPU performance polled every 5s from `/api/performance`
 - **Keyboard-driven** — Full keyboard navigation with tab-specific shortcuts
 
 ## Screenshots
@@ -31,14 +31,6 @@ Live streaming logs with source filtering and auto-scroll.
 
 ### Profiles Tab
 View and switch between model pinning profiles.
-
-## Known Issues
-
-### Hardware Tab
-
-- **System info is not detected** — System architecture / OS details are not populated.
-- **CPU / MEM is not detected** — Per-core CPU utilization bars and memory/swap usage bars show no data.
-- **Live GPU shows nothing** — The live GPU performance section (temperature, VRAM, fan speed, power draw) is empty.
 
 ## Installation
 
@@ -92,6 +84,7 @@ export LLAMA_SWAP_URL=http://your-llama-swap-host:8080
 |---|---|
 | `j` / `Down` | Scroll down |
 | `k` / `Up` | Scroll up |
+| `←` / `→` | Horizontal scroll |
 | `PageDown` / `Ctrl+D` | Next page |
 | `PageUp` / `Ctrl+U` | Previous page |
 
@@ -101,13 +94,18 @@ export LLAMA_SWAP_URL=http://your-llama-swap-host:8080
 | `j` / `Down` | Select next model |
 | `k` / `Up` | Select previous model |
 | `l` | Load selected model |
+| `L` | Load model by name (prompt) |
 | `u` | Unload selected model |
 | `x` | Cancel selected in-flight request |
 
 #### Hardware (Tab 3)
 | Key | Action |
 |---|---|
-| `r` | Refresh hardware snapshot |
+| `j` / `Down` | Scroll down |
+| `k` / `Up` | Scroll up |
+| `PageDown` / `Ctrl+D` | Page down |
+| `PageUp` / `Ctrl+U` | Page up
+| `r` | Refresh hardware + performance |
 
 #### Logs (Tab 4)
 | Key | Action |
