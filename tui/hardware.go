@@ -2,22 +2,13 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"llama-swap-tui/api"
 
 	"github.com/charmbracelet/lipgloss"
 )
-
-// ---------------------------------------------------------------------------
-// Hardware view state
-// ---------------------------------------------------------------------------
-
-type hardwareView struct {
-	sysStat     *api.SysStat
-	gpuStat     *api.GpuStat
-	hwSnap      api.HardwareSnapshot
-}
 
 // ---------------------------------------------------------------------------
 // Render
@@ -231,7 +222,7 @@ func (m *Model) renderMemorySection() string {
 		}
 	} else {
 		b.WriteString(fmt.Sprintf("  Total: %d MB (%.1f GB)\n", totalMB, float64(totalMB)/1024))
-		b.WriteString("  (Live stats from SSE perfsys events)")
+		b.WriteString("  (Live stats refresh every 5s)")
 	}
 
 	return b.String()
@@ -293,24 +284,39 @@ func (m *Model) renderLivePerf() string {
 	b.WriteString(lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color(colorAccent)).
-		Render("  Live GPU Performance (SSE)") + "\n")
+		Render("  Live GPU Performance") + "\n")
 	b.WriteString(lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorBorder)).
 		Render("  " + strings.Repeat("-", barW+12)) + "\n")
 
-	if m.gpuStat == nil {
+	if len(m.gpuStats) == 0 {
 		b.WriteString("  Waiting for GPU performance data...\n")
 		return b.String()
 	}
 
-	gs := *m.gpuStat
+	ids := make([]int, 0, len(m.gpuStats))
+	for id := range m.gpuStats {
+		ids = append(ids, id)
+	}
+	sort.Ints(ids)
+
+	for _, id := range ids {
+		b.WriteString(m.renderGpuStatBlock(m.gpuStats[id], barW))
+	}
+
+	return b.String()
+}
+
+func (m *Model) renderGpuStatBlock(gs *api.GpuStat, barW int) string {
+	var b strings.Builder
+
 	memPct := 0.0
 	if gs.MemTotalMB > 0 {
 		memPct = float64(gs.MemUsedMB) / float64(gs.MemTotalMB) * 100
 	}
 
-	b.WriteString(fmt.Sprintf("  GPU: %s (ID: %d)\n", gs.Name, gs.ID))
-	b.WriteString(fmt.Sprintf("  Temperature: %d°C (GPU) / %d°C (VRAM)\n", gs.TempC, gs.VramTempC))
+	b.WriteString(fmt.Sprintf("  GPU %d: %s\n", gs.ID, gs.Name))
+	b.WriteString(fmt.Sprintf("    Temp: %d°C (GPU) / %d°C (VRAM)\n", gs.TempC, gs.VramTempC))
 
 	// GPU utilization bar
 	gutilBars := int(gs.GpuUtilPct / 100.0 * float64(barW))
@@ -320,7 +326,7 @@ func (m *Model) renderLivePerf() string {
 	} else if gs.GpuUtilPct > 50 {
 		gutilColor = colorStatusStarting
 	}
-	b.WriteString(fmt.Sprintf("  GPU Util: [%s%s] %s\n",
+	b.WriteString(fmt.Sprintf("    GPU Util: [%s%s] %s\n",
 		strings.Repeat("█", gutilBars),
 		strings.Repeat(" ", barW-gutilBars),
 		lipgloss.NewStyle().Foreground(lipgloss.Color(gutilColor)).Render(fmt.Sprintf("%.1f%%", gs.GpuUtilPct)),
@@ -334,7 +340,7 @@ func (m *Model) renderLivePerf() string {
 	} else if memPct > 70 {
 		vramColor = colorStatusStarting
 	}
-	b.WriteString(fmt.Sprintf("  VRAM:   [%s%s] %s\n",
+	b.WriteString(fmt.Sprintf("    VRAM:   [%s%s] %s\n",
 		strings.Repeat("█", vramBars),
 		strings.Repeat(" ", barW-vramBars),
 		lipgloss.NewStyle().Foreground(lipgloss.Color(vramColor)).Render(fmt.Sprintf("%d/%d MB (%.1f%%)", gs.MemUsedMB, gs.MemTotalMB, memPct)),
@@ -343,7 +349,7 @@ func (m *Model) renderLivePerf() string {
 	// Fan speed
 	if gs.FanSpeedPct > 0 {
 		fanBars := int(gs.FanSpeedPct / 100.0 * float64(barW))
-		b.WriteString(fmt.Sprintf("  Fan:    [%s%s] %.1f%%\n",
+		b.WriteString(fmt.Sprintf("    Fan:    [%s%s] %.1f%%\n",
 			strings.Repeat("█", fanBars),
 			strings.Repeat(" ", barW-fanBars),
 			gs.FanSpeedPct,
@@ -352,18 +358,29 @@ func (m *Model) renderLivePerf() string {
 
 	// Power draw
 	if gs.PowerDrawW > 0 {
-		powerPct := 0.0
-		if m.hardware.Accelerators[gs.ID].PowerLimitWatts != nil {
-			powerPct = gs.PowerDrawW / float64(*m.hardware.Accelerators[gs.ID].PowerLimitWatts) * 100
-		}
-		b.WriteString(fmt.Sprintf("  Power:  %.1f W", gs.PowerDrawW))
-		if powerPct > 0 {
+		b.WriteString(fmt.Sprintf("    Power:  %.1f W", gs.PowerDrawW))
+		if limit, ok := m.gpuPowerLimit(gs.ID); ok {
+			powerPct := gs.PowerDrawW / float64(limit) * 100
 			b.WriteString(fmt.Sprintf(" (%.1f%% of limit)", powerPct))
 		}
 		b.WriteString("\n")
 	}
 
 	return b.String()
+}
+
+// gpuPowerLimit looks up the power limit (W) for a GPU by its index in the
+// hardware snapshot. Returns ok=false when no accelerator matches.
+func (m *Model) gpuPowerLimit(id int) (int, bool) {
+	for _, acc := range m.hardware.Accelerators {
+		if acc.Index == id {
+			if acc.PowerLimitWatts != nil {
+				return *acc.PowerLimitWatts, true
+			}
+			return 0, false
+		}
+	}
+	return 0, false
 }
 
 // ---------------------------------------------------------------------------
