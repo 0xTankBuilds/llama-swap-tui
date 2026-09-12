@@ -119,21 +119,23 @@ func (m *Model) renderProfilesView() string {
 // ---------------------------------------------------------------------------
 
 func (m *Model) profileScrollDown() {
-	if m.selected < len(m.profiles)-1 {
-		m.selected++
-		m.vp.LineDown(1)
+	if len(m.profiles) == 0 || m.selected < 0 || m.selected >= len(m.profiles)-1 {
+		return
 	}
+	m.selected++
+	m.vp.LineDown(1)
 }
 
 func (m *Model) profileScrollUp() {
-	if m.selected > 0 {
-		m.selected--
-		m.vp.LineUp(1)
+	if len(m.profiles) == 0 || m.selected < 1 {
+		return
 	}
+	m.selected--
+	m.vp.LineUp(1)
 }
 
 func (m *Model) switchSelectedProfile() tea.Cmd {
-	if m.selected >= len(m.profiles) {
+	if len(m.profiles) == 0 || m.selected < 0 || m.selected >= len(m.profiles) {
 		return nil
 	}
 	profile := m.profiles[m.selected]

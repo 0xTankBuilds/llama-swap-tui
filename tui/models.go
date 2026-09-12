@@ -36,6 +36,11 @@ func (m *Model) renderModelsView() string {
 			Render("Error: " + m.errMsg)
 	}
 
+	// Show input prompt when in load model mode
+	if m.loadModelMode {
+		return m.renderLoadModelInput()
+	}
+
 	// Split viewport: left 40% for model list, right 60% for details
 	leftW := m.vp.Width / 2
 	if leftW < 30 {
@@ -71,6 +76,27 @@ func (m *Model) renderModelsView() string {
 		}
 		b.WriteString(leftLine + strings.Repeat(" ", 2) + rightLine + "\n")
 	}
+
+	return b.String()
+}
+
+func (m *Model) renderLoadModelInput() string {
+	var b strings.Builder
+
+	b.WriteString(lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color(colorAccent)).
+		Render("  Load Model") + "\n")
+	b.WriteString(lipgloss.NewStyle().
+		Foreground(lipgloss.Color(colorBorder)).
+		Render("  " + strings.Repeat("-", 40)) + "\n")
+	b.WriteString("\n")
+	b.WriteString("  " + m.loadModelInput.View() + "\n")
+	b.WriteString("\n")
+	hint := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(colorTextTertiary)).
+		Render("  Enter: load  Esc: cancel")
+	b.WriteString(hint)
 
 	return b.String()
 }
@@ -142,7 +168,7 @@ func (m *Model) renderModelList(width int) string {
 	if len(m.models) > 0 {
 		hint := lipgloss.NewStyle().
 			Foreground(lipgloss.Color(colorTextTertiary)).
-			Render("(j/k: nav  l:load  u:unload  x:cancel)")
+			Render("(j/k: nav  l:load  L:load-by-name  u:unload  x:cancel)")
 		b.WriteString(hint)
 	}
 
@@ -152,6 +178,10 @@ func (m *Model) renderModelList(width int) string {
 func (m *Model) renderModelDetail(width int) string {
 	var b strings.Builder
 
+	// Safety: clamp selected before any access
+	if len(m.models) > 0 && m.selected >= len(m.models) {
+		m.selected = len(m.models) - 1
+	}
 	if len(m.models) == 0 || m.selected < 0 || m.selected >= len(m.models) {
 		b.WriteString("  Select a model to see details\n")
 		return b.String()
@@ -221,10 +251,13 @@ func (m *Model) renderModelDetail(width int) string {
 	}
 
 	// Activity rows
-	if len(m.modelActivity.Data) == 0 {
+	if m.modelActivity.Data == nil || len(m.modelActivity.Data) == 0 {
 		b.WriteString("  No activity for this model.\n")
 	} else {
 		for i := len(m.modelActivity.Data) - 1; i >= 0; i-- {
+			if i < 0 || i >= len(m.modelActivity.Data) {
+				break
+			}
 			entry := m.modelActivity.Data[i]
 			line := m.renderModelActivityRow(entry, width)
 			b.WriteString(line + "\n")
@@ -365,27 +398,27 @@ func modelName(m api.Model) string {
 // ---------------------------------------------------------------------------
 
 func (m *Model) modelScrollDown() tea.Cmd {
-	if m.selected < len(m.models)-1 {
-		m.selected++
-		m.selectedModel = modelName(m.models[m.selected])
-		m.vp.LineDown(1)
-		return m.fetchModelActivity(m.selectedModel)
+	if len(m.models) == 0 || m.selected < 0 || m.selected >= len(m.models)-1 {
+		return nil
 	}
-	return nil
+	m.selected++
+	m.selectedModel = modelName(m.models[m.selected])
+	m.vp.LineDown(1)
+	return m.fetchModelActivity(m.selectedModel)
 }
 
 func (m *Model) modelScrollUp() tea.Cmd {
-	if m.selected > 0 {
-		m.selected--
-		m.selectedModel = modelName(m.models[m.selected])
-		m.vp.LineUp(1)
-		return m.fetchModelActivity(m.selectedModel)
+	if len(m.models) == 0 || m.selected < 1 {
+		return nil
 	}
-	return nil
+	m.selected--
+	m.selectedModel = modelName(m.models[m.selected])
+	m.vp.LineUp(1)
+	return m.fetchModelActivity(m.selectedModel)
 }
 
 func (m *Model) loadSelectedModel() tea.Cmd {
-	if m.selected >= len(m.models) {
+	if len(m.models) == 0 || m.selected < 0 || m.selected >= len(m.models) {
 		return nil
 	}
 	model := m.models[m.selected]
@@ -409,7 +442,7 @@ func (m *Model) loadSelectedModel() tea.Cmd {
 }
 
 func (m *Model) unloadSelectedModel() tea.Cmd {
-	if m.selected >= len(m.models) {
+	if len(m.models) == 0 || m.selected < 0 || m.selected >= len(m.models) {
 		return nil
 	}
 	model := m.models[m.selected]
@@ -431,7 +464,7 @@ func (m *Model) unloadSelectedModel() tea.Cmd {
 }
 
 func (m *Model) cancelSelectedRequest() tea.Cmd {
-	if len(m.inflight) == 0 {
+	if len(m.inflight) == 0 || m.selected < 0 || m.selected >= len(m.inflight) {
 		return nil
 	}
 	req := m.inflight[m.selected]
