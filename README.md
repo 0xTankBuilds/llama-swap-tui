@@ -37,11 +37,6 @@ Live streaming logs with source filtering and auto-scroll.
 
 ![Logs Tab](docs/screenshots/logs.png)
 
-### Profiles Tab
-View and switch between model pinning profiles.
-
-![Profiles Tab](docs/screenshots/profiles.png)
-
 ## Installation
 
 ### Prerequisites
