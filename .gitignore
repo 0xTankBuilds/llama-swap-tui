@@ -2,6 +2,9 @@
 llama-swap-tui
 *.exe
 
+# Scratch / transient build dir
+.tmp/
+
 # Go test/cache artifacts
 *.test
 *.out
