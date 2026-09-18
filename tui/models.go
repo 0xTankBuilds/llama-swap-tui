@@ -373,7 +373,7 @@ func (m *Model) renderModelActivityRow(entry api.ActivityLogEntry, width int) st
 	}
 
 	return fmt.Sprintf("  %-*s %-*s %-*s %-*s %-*s %-s",
-		timeW, entry.Timestamp.Format("15:04:05"),
+		timeW, entry.Timestamp.Local().Format("15:04:05"),
 		statusW, lipgloss.NewStyle().Foreground(lipgloss.Color(statusColor)).Render(fmt.Sprintf("%d", entry.RespStatusCode)),
 		inW, humanTokens(entry.Tokens.InputTokens),
 		outW, humanTokens(entry.Tokens.OutputTokens),

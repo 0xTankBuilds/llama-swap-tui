@@ -241,7 +241,7 @@ func (m *Model) renderActivityRow(entry api.ActivityLogEntry, idx int) string {
 	// Render full-width (no truncation) - scrolling handles visibility
 	line := fmt.Sprintf("  %-*d %-*s %-*s %-*s",
 		colID, entry.ID,
-		colTime, entry.Timestamp.Format("15:04:05"),
+		colTime, entry.Timestamp.Local().Format("15:04:05"),
 		colModel, entry.Model,
 		colStatus, statusStr)
 	if m.useTokenColumns() {
