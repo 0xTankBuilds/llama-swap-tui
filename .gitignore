@@ -20,6 +20,7 @@ llama-swap-tui
 # Project docs with personal context
 HANDOVER.md
 CLAUDE.md
+AGENTS.md
 
 # Python
 __pycache__/
