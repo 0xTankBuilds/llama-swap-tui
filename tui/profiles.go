@@ -31,15 +31,14 @@ func (m *Model) renderProfilesView() string {
 			Foreground(lipgloss.Color(colorStatusError)).
 			Render("Error: " + m.errMsg)
 	}
+	// Render header + body for backward compatibility
+	header := m.renderProfilesHeader()
+	body := m.renderProfilesBody()
+	return header + body
+}
 
+func (m *Model) renderProfilesHeader() string {
 	var b strings.Builder
-
-	// Status message
-	if m.statusMsg != "" && time.Since(m.statusTime) < 5*time.Second {
-		b.WriteString(lipgloss.NewStyle().
-			Foreground(lipgloss.Color(colorLoading)).
-			Render("  "+m.statusMsg) + "\n")
-	}
 
 	// Dynamic column widths
 	idW := 24
@@ -55,6 +54,25 @@ func (m *Model) renderProfilesView() string {
 	b.WriteString(lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorBorder)).
 		Render("  " + strings.Repeat("-", idW+descW+4)) + "\n")
+	return b.String()
+}
+
+func (m *Model) renderProfilesBody() string {
+	var b strings.Builder
+
+	// Status message
+	if m.statusMsg != "" && time.Since(m.statusTime) < 5*time.Second {
+		b.WriteString(lipgloss.NewStyle().
+			Foreground(lipgloss.Color(colorLoading)).
+			Render("  "+m.statusMsg) + "\n")
+	}
+
+	// Dynamic column widths
+	idW := 24
+	descW := m.vp.Width - idW - 20 // 20 = space for " ◉ active" indicator + padding
+	if descW < 20 {
+		descW = 20
+	}
 
 	// Fetch profiles if we don't have any
 	if len(m.profiles) == 0 {

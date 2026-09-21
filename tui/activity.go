@@ -47,12 +47,12 @@ func (m *Model) renderActivityView() string {
 			Render("Error: " + m.errMsg)
 	}
 
-	// Render content and apply horizontal scroll
-	raw := m.renderActivityContent()
+	// Render body and apply horizontal scroll (header is sticky above viewport)
+	raw := m.renderActivityBody()
 	return applyHScroll(raw, m.hScrollOffset, m.vp.Width)
 }
 
-func (m *Model) renderActivityContent() string {
+func (m *Model) renderActivityBody() string {
 	var b strings.Builder
 
 	// In-flight requests section (at top)
@@ -87,9 +87,6 @@ func (m *Model) renderActivityContent() string {
 		b.WriteString(m.renderActivityStats())
 		b.WriteString("\n")
 	}
-
-	// Table header
-	b.WriteString(m.renderActivityHeader())
 
 	// Table rows — most recent at the top (Data is returned in desc order)
 	if len(m.activityPage.Data) == 0 {

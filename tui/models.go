@@ -51,33 +51,14 @@ func (m *Model) renderModelsView() string {
 		rightW = 30
 	}
 
-	// Build left pane (model list)
-	leftContent := m.renderModelList(leftW)
+	// Build left pane (model list body — header is sticky above)
+	leftContent := m.renderModelsListBody(leftW)
 
 	// Build right pane (model details + activity)
 	rightContent := m.renderModelDetail(rightW)
 
 	// Join panes with gap
-	var b strings.Builder
-	leftLines := strings.Split(leftContent, "\n")
-	rightLines := strings.Split(rightContent, "\n")
-	maxLines := len(leftLines)
-	if len(rightLines) > maxLines {
-		maxLines = len(rightLines)
-	}
-	for i := 0; i < maxLines; i++ {
-		leftLine := ""
-		if i < len(leftLines) {
-			leftLine = leftLines[i]
-		}
-		rightLine := ""
-		if i < len(rightLines) {
-			rightLine = rightLines[i]
-		}
-		b.WriteString(leftLine + strings.Repeat(" ", 2) + rightLine + "\n")
-	}
-
-	return b.String()
+	return joinPanes(leftContent, rightContent)
 }
 
 func (m *Model) renderLoadModelInput() string {
@@ -101,7 +82,79 @@ func (m *Model) renderLoadModelInput() string {
 	return b.String()
 }
 
-func (m *Model) renderModelList(width int) string {
+// modelsPaneWidths returns the widths for the two Models-tab panes.
+func (m *Model) modelsPaneWidths() (leftW, rightW int) {
+	leftW = m.vp.Width / 2
+	if leftW < 30 {
+		leftW = 30
+	}
+	rightW = m.vp.Width - leftW - 2 // -2 for gap
+	if rightW < 30 {
+		rightW = 30
+	}
+	return
+}
+
+// modelsColumnWidths returns the list column widths for a given pane width.
+func (m *Model) modelsColumnWidths(width int) (nameW, stateW, stratW, descW int) {
+	nameW = width - 20 // reserve space for state, strategy, description
+	if nameW < 15 {
+		nameW = 15
+	}
+	stateW = 10
+	stratW = 12
+	descW = width - nameW - stateW - stratW - 10
+	if descW < 15 {
+		descW = 15
+	}
+	return
+}
+
+// renderModelsHeader renders the sticky one-line header for the Models tab:
+// list column names over the left pane and the selected model's title over
+// the right pane (so the model stays identified while details scroll).
+func (m *Model) renderModelsHeader() string {
+	leftW, rightW := m.modelsPaneWidths()
+	nameW, stateW, stratW, descW := m.modelsColumnWidths(leftW)
+
+	left := fmt.Sprintf("  %-*s %-*s %-*s %s", nameW, "Name", stateW, "State", stratW, "Strategy", strings.Repeat("-", descW))
+
+	right := ""
+	if len(m.models) > 0 && m.selected >= 0 && m.selected < len(m.models) {
+		right = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color(colorAccent)).
+			Render(truncate(modelName(m.models[m.selected]), rightW-2))
+	}
+	return joinPanes(left, right)
+}
+
+// joinPanes joins two pane renderings line by line with a 2-space gap.
+func joinPanes(left, right string) string {
+	leftLines := strings.Split(left, "\n")
+	rightLines := strings.Split(right, "\n")
+	maxLines := len(leftLines)
+	if len(rightLines) > maxLines {
+		maxLines = len(rightLines)
+	}
+	var b strings.Builder
+	for i := 0; i < maxLines; i++ {
+		leftLine := ""
+		if i < len(leftLines) {
+			leftLine = leftLines[i]
+		}
+		rightLine := ""
+		if i < len(rightLines) {
+			rightLine = rightLines[i]
+		}
+		b.WriteString(leftLine + strings.Repeat(" ", 2) + rightLine + "\n")
+	}
+	return b.String()
+}
+
+// renderModelsListBody renders the left pane body (no sticky header):
+// status message, model rows, in-flight requests and the footer hint.
+func (m *Model) renderModelsListBody(width int) string {
 	var b strings.Builder
 
 	// Status message
@@ -111,24 +164,7 @@ func (m *Model) renderModelList(width int) string {
 			Render(m.statusMsg) + "\n")
 	}
 
-	// Dynamic column widths for left pane
-	nameW := width - 20 // reserve space for state, strategy, description
-	if nameW < 15 {
-		nameW = 15
-	}
-	stateW := 10
-	stratW := 12
-	descW := width - nameW - stateW - stratW - 10
-	if descW < 15 {
-		descW = 15
-	}
-
-	// Table header
-	header := fmt.Sprintf("  %-*s %-*s %-*s %s", nameW, "Name", stateW, "State", stratW, "Strategy", strings.Repeat("-", descW))
-	b.WriteString(lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color(colorAccent)).
-		Render(header) + "\n")
+	nameW, stateW, stratW, descW := m.modelsColumnWidths(width)
 
 	// Model rows
 	if len(m.models) == 0 {
@@ -189,11 +225,7 @@ func (m *Model) renderModelDetail(width int) string {
 
 	model := m.models[m.selected]
 
-	// Model info header
-	b.WriteString(lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color(colorAccent)).
-		Render("  " + modelName(model)) + "\n")
+	// Details pane (the model title lives in the sticky header line)
 	b.WriteString(lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorBorder)).
 		Render("  " + strings.Repeat("-", width-4)) + "\n")

@@ -37,9 +37,14 @@ func (f logSourceFilter) String() string {
 // ---------------------------------------------------------------------------
 
 func (m *Model) renderLogsContent() string {
-	var b strings.Builder
+	// Render header + body for backward compatibility
+	header := m.renderLogsHeader()
+	body := m.renderLogsBody()
+	return header + body
+}
 
-	// Source filter indicator
+func (m *Model) renderLogsHeader() string {
+	var b strings.Builder
 	b.WriteString(lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color(colorAccent)).
@@ -48,6 +53,11 @@ func (m *Model) renderLogsContent() string {
 			Foreground(lipgloss.Color(colorTextSecondary)).
 			Render(fmt.Sprintf("(filter: %s)", m.logFilter.String())))
 	b.WriteString("\n")
+	return b.String()
+}
+
+func (m *Model) renderLogsBody() string {
+	var b strings.Builder
 
 	if len(m.logLines) == 0 {
 		b.WriteString("  No logs yet.\n")

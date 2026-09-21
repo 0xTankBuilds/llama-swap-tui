@@ -20,11 +20,18 @@ func (m *Model) renderHardwareView() string {
 			Foreground(lipgloss.Color(colorStatusError)).
 			Render("Error: " + m.errMsg)
 	}
+	// Render header + body for backward compatibility
+	header := m.renderHardwareHeader()
+	body := m.renderHardwareBody()
+	return header + body
+}
 
+func (m *Model) renderHardwareHeader() string {
+	return m.renderSystemInfo()
+}
+
+func (m *Model) renderHardwareBody() string {
 	var b strings.Builder
-
-	// System info header
-	b.WriteString(m.renderSystemInfo())
 
 	// CPU section
 	b.WriteString(m.renderCPUSection())

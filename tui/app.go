@@ -204,6 +204,10 @@ type Model struct {
 	// Horizontal scroll
 	hScrollOffset int
 
+	// Window size (for viewport recompute on tab switch)
+	winW int
+	winH int
+
 	// Viewport for scrollable content
 	vp viewport.Model
 
@@ -238,6 +242,7 @@ func NewModel(client *api.Client, version string) *Model {
 		appVersion: version,
 	}
 	m.vp = viewport.New(80, 24)
+	m.winW, m.winH = 80, 24
 	m.loading = make(map[string]bool)
 	m.loadModelInput = textinput.New()
 	m.loadModelInput.Placeholder = "model name"
@@ -351,24 +356,31 @@ func (m *Model) View() string {
 	// Newline to separate tab bar from tab content
 	b.WriteString("\n")
 
-	// Tab content — all tabs use the viewport for scrolling
+	// Tab header (sticky, always visible above viewport)
+	header := m.renderTabHeader()
+	if header != "" {
+		b.WriteString(header)
+	}
+
+	// Size the viewport for the current tab (sticky header height varies)
+	headerH := strings.Count(header, "\n")
+	m.recalcVP(headerH)
+
+	// Tab content — scrollable body
 	switch m.tab {
 	case tabActivity:
 		m.vp.SetContent(m.renderActivityView())
-		b.WriteString(m.vp.View())
 	case tabModels:
 		m.vp.SetContent(m.renderModelsView())
-		b.WriteString(m.vp.View())
 	case tabHardware:
-		m.vp.SetContent(m.renderHardwareView())
-		b.WriteString(m.vp.View())
+		m.vp.SetContent(m.renderHardwareBody())
 	case tabLogs:
-		m.vp.SetContent(m.renderLogsContent())
-		b.WriteString(m.vp.View())
+		m.vp.SetContent(m.renderLogsBody())
 	case tabProfiles:
-		m.vp.SetContent(m.renderProfilesView())
-		b.WriteString(m.vp.View())
+		m.vp.SetContent(m.renderProfilesBody())
 	}
+	b.WriteString(m.vp.View())
+	b.WriteString("\n")
 
 	// Error display
 	if m.errMsg != "" {
@@ -895,12 +907,19 @@ func (m *Model) refreshCurrentTab() tea.Cmd {
 // ---------------------------------------------------------------------------
 
 func (m *Model) handleResize(msg tea.WindowSizeMsg) {
-	// Reserve lines for: title (2) + tab bar (1) + status bar (1) = 4
-	contentH := msg.Height - 4
+	m.winW = msg.Width
+	m.winH = msg.Height
+}
+
+// recalcVP sizes the scrollable viewport to the remaining room after the
+// fixed chrome: title (1) + tab bar (3) + gap (1) + sticky header (varies)
+// + status bar (2).
+func (m *Model) recalcVP(headerH int) {
+	m.vp.Width = m.winW
+	contentH := m.winH - 7 - headerH
 	if contentH < 4 {
 		contentH = 4
 	}
-	m.vp.Width = msg.Width
 	m.vp.Height = contentH
 }
 
@@ -1013,6 +1032,27 @@ func (m *Model) renderHelpOverlay() string {
 		Align(lipgloss.Center, lipgloss.Center).
 		Render(overlay)
 }
+
+// ---------------------------------------------------------------------------
+// Tab header helpers
+// ---------------------------------------------------------------------------
+
+func (m *Model) renderTabHeader() string {
+	switch m.tab {
+	case tabActivity:
+		return m.renderActivityHeader()
+	case tabModels:
+		return m.renderModelsHeader()
+	case tabHardware:
+		return m.renderHardwareHeader()
+	case tabLogs:
+		return m.renderLogsHeader()
+	case tabProfiles:
+		return m.renderProfilesHeader()
+	}
+	return ""
+}
+
 
 // ---------------------------------------------------------------------------
 // Tab view stubs

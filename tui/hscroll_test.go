@@ -90,7 +90,7 @@ func TestActivityColumnsAdaptive(t *testing.T) {
 
 	// Wide terminal: token columns shown, prefill/decode too.
 	m.vp.Width = 140
-	wide := m.renderActivityView()
+	wide := m.renderActivityHeader()
 	for _, want := range []string{"Cached", "In", "Out", "P/s", "D/s"} {
 		if !strings.Contains(wide, want) {
 			t.Errorf("wide layout missing %q", want)
@@ -99,7 +99,7 @@ func TestActivityColumnsAdaptive(t *testing.T) {
 
 	// Narrow terminal: token columns dropped, prefill/decode kept.
 	m.vp.Width = 100
-	narrow := m.renderActivityView()
+	narrow := m.renderActivityHeader()
 	if strings.Contains(narrow, "Cached") {
 		t.Error("narrow layout should not show Cached column")
 	}
