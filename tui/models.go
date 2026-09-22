@@ -51,11 +51,15 @@ func (m *Model) renderModelsView() string {
 		rightW = 30
 	}
 
-	// Build left pane (model list body — header is sticky above)
-	leftContent := m.renderModelsListBody(leftW)
+	// Build left pane inside the viewport (clipped to vp.Height, scrollable)
+	origWidth := m.vp.Width
+	m.vp.Width = leftW
+	m.vp.SetContent(m.renderModelsListBody(leftW))
+	leftContent := m.vp.View()
+	m.vp.Width = origWidth
 
-	// Build right pane (model details + activity)
-	rightContent := m.renderModelDetail(rightW)
+	// Build right pane (model details + activity) — pinned, always full height
+	rightContent := m.renderModelDetail(rightW, m.vp.Height)
 
 	// Join panes with gap
 	return joinPanes(leftContent, rightContent)
@@ -120,11 +124,12 @@ func (m *Model) renderModelsHeader() string {
 	left := fmt.Sprintf("  %-*s %-*s %-*s %s", nameW, "Name", stateW, "State", stratW, "Strategy", strings.Repeat("-", descW))
 
 	right := ""
-	if len(m.models) > 0 && m.selected >= 0 && m.selected < len(m.models) {
+	models := m.models // snapshot: fetch goroutine may swap the slice
+	if len(models) > 0 && m.selected >= 0 && m.selected < len(models) {
 		right = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(lipgloss.Color(colorAccent)).
-			Render(truncate(modelName(m.models[m.selected]), rightW-2))
+			Render(truncate(modelName(models[m.selected]), rightW-2))
 	}
 	return joinPanes(left, right)
 }
@@ -149,7 +154,7 @@ func joinPanes(left, right string) string {
 		}
 		b.WriteString(leftLine + strings.Repeat(" ", 2) + rightLine + "\n")
 	}
-	return b.String()
+	return strings.TrimSuffix(b.String(), "\n")
 }
 
 // renderModelsListBody renders the left pane body (no sticky header):
@@ -211,19 +216,21 @@ func (m *Model) renderModelsListBody(width int) string {
 	return b.String()
 }
 
-func (m *Model) renderModelDetail(width int) string {
+func (m *Model) renderModelDetail(width, maxH int) string {
 	var b strings.Builder
 
-	// Safety: clamp selected before any access
-	if len(m.models) > 0 && m.selected >= len(m.models) {
-		m.selected = len(m.models) - 1
+	// Safety: clamp selected before any access.
+	// Snapshot: fetch goroutines may swap in a new slice mid-render.
+	models := m.models
+	if len(models) > 0 && m.selected >= len(models) {
+		m.selected = len(models) - 1
 	}
-	if len(m.models) == 0 || m.selected < 0 || m.selected >= len(m.models) {
+	if len(models) == 0 || m.selected < 0 || m.selected >= len(models) {
 		b.WriteString("  Select a model to see details\n")
-		return b.String()
+		return strings.TrimSuffix(b.String(), "\n")
 	}
 
-	model := m.models[m.selected]
+	model := models[m.selected]
 
 	// Details pane (the model title lives in the sticky header line)
 	b.WriteString(lipgloss.NewStyle().
@@ -282,21 +289,41 @@ func (m *Model) renderModelDetail(width int) string {
 		))
 	}
 
-	// Activity rows
-	if m.modelActivity.Data == nil || len(m.modelActivity.Data) == 0 {
-		b.WriteString("  No activity for this model.\n")
+	// Activity rows with scrolling.
+	// Snapshot: the fetch goroutine may swap m.modelActivity with a new
+	// page while we are rendering, so iterate the captured slice instead.
+	data := m.modelActivity.Data
+	var rows []string
+	if data == nil || len(data) == 0 {
+		rows = []string{"  No activity for this model."}
 	} else {
-		for i := len(m.modelActivity.Data) - 1; i >= 0; i-- {
-			if i < 0 || i >= len(m.modelActivity.Data) {
-				break
-			}
-			entry := m.modelActivity.Data[i]
-			line := m.renderModelActivityRow(entry, width)
-			b.WriteString(line + "\n")
+		for i := len(data) - 1; i >= 0; i-- {
+			rows = append(rows, m.renderModelActivityRow(data[i], width))
 		}
 	}
 
-	return b.String()
+	// Calculate visible rows based on activityScroll
+	start := m.activityScroll
+	if start >= len(rows) {
+		m.activityScroll = 0
+		start = 0
+	}
+	end := start + (maxH - strings.Count(b.String(), "\n"))
+	if end > len(rows) {
+		end = len(rows)
+	}
+	for i := start; i < end; i++ {
+		if i < len(rows) {
+			b.WriteString(rows[i] + "\n")
+		}
+	}
+
+	// Pad to maxH lines
+	for n := strings.Count(b.String(), "\n"); n < maxH; n++ {
+		b.WriteString("\n")
+	}
+
+	return strings.TrimSuffix(b.String(), "\n")
 }
 
 func (m *Model) renderModelRow(model api.Model, idx int) string {
@@ -447,6 +474,20 @@ func (m *Model) modelScrollUp() tea.Cmd {
 	m.selectedModel = modelName(m.models[m.selected])
 	m.vp.LineUp(1)
 	return m.fetchModelActivity(m.selectedModel)
+}
+
+// modelActivityScrollDown scrolls down the activity rows on the Models tab
+func (m *Model) modelActivityScrollDown() tea.Cmd {
+	m.activityScroll++
+	return nil
+}
+
+// modelActivityScrollUp scrolls up the activity rows on the Models tab
+func (m *Model) modelActivityScrollUp() tea.Cmd {
+	if m.activityScroll > 0 {
+		m.activityScroll--
+	}
+	return nil
 }
 
 func (m *Model) loadSelectedModel() tea.Cmd {

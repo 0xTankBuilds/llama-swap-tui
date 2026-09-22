@@ -204,6 +204,9 @@ type Model struct {
 	// Horizontal scroll
 	hScrollOffset int
 
+	// Activity row scroll offset (Models tab, right pane)
+	activityScroll int
+
 	// Window size (for viewport recompute on tab switch)
 	winW int
 	winH int
@@ -323,6 +326,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case ModelsRefreshMsg:
+		// Activity page for the selected model was replaced — reset the
+		// right-pane activity scroll offset.
+		m.activityScroll = 0
 		return m, nil
 
 	case ProfilesRefreshMsg:
@@ -359,6 +365,12 @@ func (m *Model) View() string {
 	// Tab header (sticky, always visible above viewport)
 	header := m.renderTabHeader()
 	if header != "" {
+		// Ensure the header ends with a newline so it never merges with
+		// the first content line (the models pane header is a single line
+		// without a trailing newline).
+		if !strings.HasSuffix(header, "\n") {
+			header += "\n"
+		}
 		b.WriteString(header)
 	}
 
@@ -368,18 +380,23 @@ func (m *Model) View() string {
 
 	// Tab content — scrollable body
 	switch m.tab {
+	case tabModels:
+		// Models renders its own two-pane layout (left scrolls in the
+		// viewport, right pane pinned), so it writes directly.
+		b.WriteString(m.renderModelsView())
 	case tabActivity:
 		m.vp.SetContent(m.renderActivityView())
-	case tabModels:
-		m.vp.SetContent(m.renderModelsView())
+		b.WriteString(m.vp.View())
 	case tabHardware:
 		m.vp.SetContent(m.renderHardwareBody())
+		b.WriteString(m.vp.View())
 	case tabLogs:
 		m.vp.SetContent(m.renderLogsBody())
+		b.WriteString(m.vp.View())
 	case tabProfiles:
 		m.vp.SetContent(m.renderProfilesBody())
+		b.WriteString(m.vp.View())
 	}
-	b.WriteString(m.vp.View())
 	b.WriteString("\n")
 
 	// Error display
@@ -543,6 +560,7 @@ func (m *Model) fetchModels() tea.Cmd {
 		m.models = models
 		m.clampSelected()
 		m.selectedModel = ""
+		m.activityScroll = 0
 		m.modelActivity = api.ActivityPage{}
 		m.modelActivityStats = nil
 		return ModelsRefreshMsg{}
@@ -807,6 +825,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch m.tab {
 		case tabActivity:
 			return m, m.activityNextPage()
+		case tabModels:
+			m.modelActivityScrollDown()
 		case tabHardware:
 			m.vp.PageDown()
 		case tabLogs:
@@ -816,6 +836,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch m.tab {
 		case tabActivity:
 			return m, m.activityPrevPage()
+		case tabModels:
+			m.modelActivityScrollUp()
 		case tabHardware:
 			m.vp.PageUp()
 		case tabLogs:
@@ -844,7 +866,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "j", "down":
 		switch m.tab {
 		case tabActivity:
-			m.activityScrollDown()
+			m.modelActivityScrollDown()
 		case tabHardware:
 			m.vp.LineDown(1)
 		case tabLogs:
@@ -857,7 +879,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "k", "up":
 		switch m.tab {
 		case tabActivity:
-			m.activityScrollUp()
+			m.modelActivityScrollUp()
 		case tabHardware:
 			m.vp.LineUp(1)
 		case tabLogs:
@@ -1021,7 +1043,8 @@ func (m *Model) renderHelpOverlay() string {
 				"  1-5              Switch tabs\n" +
 				"  tab / shift+tab  Next / prev tab\n\n" +
 				"  Activity (1):  j/k scroll  pgup/pgdown pages\n" +
-				"  Models (2):    j/k navigate  l=load  L=load-by-name  u=unload  x=cancel\n" +
+				"  Models (2):    j/k navigate  l=load  L=name  u=unload  x=cancel\n" +
+				"                  pgup/pgdown scroll activity rows\n" +
 				"  Hardware (3):  j/k scroll  pgup/pgdown pages  r refresh\n" +
 				"  Logs (4):      f cycle filter  end=scroll to bottom\n" +
 				"  Profiles (5):  j/k navigate  enter=switch",
