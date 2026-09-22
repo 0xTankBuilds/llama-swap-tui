@@ -14,18 +14,6 @@ import (
 // Render
 // ---------------------------------------------------------------------------
 
-func (m *Model) renderHardwareView() string {
-	if m.errMsg != "" {
-		return lipgloss.NewStyle().
-			Foreground(lipgloss.Color(colorStatusError)).
-			Render("Error: " + m.errMsg)
-	}
-	// Render header + body for backward compatibility
-	header := m.renderHardwareHeader()
-	body := m.renderHardwareBody()
-	return header + body
-}
-
 func (m *Model) renderHardwareHeader() string {
 	return m.renderSystemInfo()
 }

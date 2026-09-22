@@ -25,18 +25,6 @@ type profilesView struct {
 // Render
 // ---------------------------------------------------------------------------
 
-func (m *Model) renderProfilesView() string {
-	if m.errMsg != "" {
-		return lipgloss.NewStyle().
-			Foreground(lipgloss.Color(colorStatusError)).
-			Render("Error: " + m.errMsg)
-	}
-	// Render header + body for backward compatibility
-	header := m.renderProfilesHeader()
-	body := m.renderProfilesBody()
-	return header + body
-}
-
 func (m *Model) renderProfilesHeader() string {
 	var b strings.Builder
 
@@ -165,13 +153,6 @@ func (m *Model) switchSelectedProfile() tea.Cmd {
 		defer cancel()
 		name := profile.ID
 		state, err := m.client.SetActiveProfile(ctx, &name)
-		if err != nil {
-			m.statusMsg = fmt.Sprintf("Failed to switch profile: %v", err)
-		} else {
-			m.activeProfile = state.Active
-			m.statusMsg = fmt.Sprintf("Switched to %s", m.activeProfile)
-		}
-		m.statusTime = time.Now()
-		return ProfilesRefreshMsg{}
+		return ProfileSwitchMsg{name: name, state: state, err: err}
 	}
 }

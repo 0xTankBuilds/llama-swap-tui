@@ -41,15 +41,8 @@ func (m *Model) renderModelsView() string {
 		return m.renderLoadModelInput()
 	}
 
-	// Split viewport: left 40% for model list, right 60% for details
-	leftW := m.vp.Width / 2
-	if leftW < 30 {
-		leftW = 30
-	}
-	rightW := m.vp.Width - leftW - 2 // -2 for gap
-	if rightW < 30 {
-		rightW = 30
-	}
+	// Split viewport: left for the model list, right for details
+	leftW, rightW := m.modelsPaneWidths()
 
 	// Build left pane inside the viewport (clipped to vp.Height, scrollable)
 	origWidth := m.vp.Width
@@ -227,6 +220,9 @@ func (m *Model) renderModelDetail(width, maxH int) string {
 	}
 	if len(models) == 0 || m.selected < 0 || m.selected >= len(models) {
 		b.WriteString("  Select a model to see details\n")
+		for n := strings.Count(b.String(), "\n"); n < maxH; n++ {
+			b.WriteString("\n")
+		}
 		return strings.TrimSuffix(b.String(), "\n")
 	}
 
@@ -302,20 +298,29 @@ func (m *Model) renderModelDetail(width, maxH int) string {
 		}
 	}
 
-	// Calculate visible rows based on activityScroll
+	// Calculate visible rows based on activityScroll (clamped locally —
+	// the stored value is reset in Update on refresh messages). Cap the
+	// rows so the pane renders exactly maxH lines, even when the fixed
+	// section above is shorter or longer than the terminal allows.
 	start := m.activityScroll
 	if start >= len(rows) {
-		m.activityScroll = 0
 		start = 0
 	}
-	end := start + (maxH - strings.Count(b.String(), "\n"))
+	visible := maxH - strings.Count(b.String(), "\n")
+	if visible < 0 {
+		// Tiny terminal: trim the fixed section to maxH lines.
+		lines := strings.Split(b.String(), "\n")
+		if len(lines) > maxH {
+			lines = lines[:maxH]
+		}
+		return strings.Join(lines, "\n")
+	}
+	end := start + visible
 	if end > len(rows) {
 		end = len(rows)
 	}
 	for i := start; i < end; i++ {
-		if i < len(rows) {
-			b.WriteString(rows[i] + "\n")
-		}
+		b.WriteString(rows[i] + "\n")
 	}
 
 	// Pad to maxH lines
@@ -503,14 +508,7 @@ func (m *Model) loadSelectedModel() tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		err := m.client.LoadModel(ctx, modelName(model))
-		delete(m.loading, modelName(model))
-		if err != nil {
-			m.statusMsg = fmt.Sprintf("Failed to load %s: %v", modelName(model), err)
-		} else {
-			m.statusMsg = fmt.Sprintf("Loading %s initiated", modelName(model))
-		}
-		m.statusTime = time.Now()
-		return ModelsRefreshMsg{}
+		return ModelActionMsg{action: "load", target: modelName(model), err: err}
 	}
 }
 
@@ -526,13 +524,7 @@ func (m *Model) unloadSelectedModel() tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		err := m.client.UnloadModel(ctx, modelName(model))
-		if err != nil {
-			m.statusMsg = fmt.Sprintf("Failed to unload %s: %v", modelName(model), err)
-		} else {
-			m.statusMsg = fmt.Sprintf("Unloaded %s", modelName(model))
-		}
-		m.statusTime = time.Now()
-		return ModelsRefreshMsg{}
+		return ModelActionMsg{action: "unload", target: modelName(model), err: err}
 	}
 }
 
@@ -548,12 +540,6 @@ func (m *Model) cancelSelectedRequest() tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		err := m.client.CancelInflightRequest(ctx, req.ID)
-		if err != nil {
-			m.statusMsg = fmt.Sprintf("Failed to cancel: %v", err)
-		} else {
-			m.statusMsg = fmt.Sprintf("Cancelled request %s", req.ID)
-		}
-		m.statusTime = time.Now()
-		return ModelsRefreshMsg{}
+		return ModelActionMsg{action: "cancel", target: req.ID, err: err}
 	}
 }

@@ -36,13 +36,6 @@ func (f logSourceFilter) String() string {
 // Render
 // ---------------------------------------------------------------------------
 
-func (m *Model) renderLogsContent() string {
-	// Render header + body for backward compatibility
-	header := m.renderLogsHeader()
-	body := m.renderLogsBody()
-	return header + body
-}
-
 func (m *Model) renderLogsHeader() string {
 	var b strings.Builder
 	b.WriteString(lipgloss.NewStyle().

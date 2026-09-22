@@ -91,17 +91,55 @@ type SSEErrMsg error
 // ShutdownMsg triggers graceful shutdown.
 type ShutdownMsg struct{}
 
-// ActivityRefreshMsg triggers an activity refresh.
-type ActivityRefreshMsg struct{}
+// Fetched messages carry API data into the update loop. Cmd goroutines only
+// perform the HTTP fetch and return the data here; they never write Model
+// state directly, so the update loop and View() never race.
+type VersionFetchedMsg struct {
+	info api.VersionInfo
+}
 
-// HardwareRefreshMsg triggers a hardware fetch.
-type HardwareRefreshMsg struct{}
+type ActivityFetchedMsg struct {
+	page  api.ActivityPage
+	stats *api.ActivityStats
+}
 
-// ModelsRefreshMsg triggers a models fetch.
-type ModelsRefreshMsg struct{}
+type HardwareFetchedMsg struct {
+	hw api.HardwareSnapshot
+}
 
-// ProfilesRefreshMsg triggers a profiles fetch.
-type ProfilesRefreshMsg struct{}
+type PerfFetchedMsg struct {
+	resp api.PerformanceResponse
+}
+
+type ModelsFetchedMsg struct {
+	models []api.Model
+}
+
+type ModelActivityFetchedMsg struct {
+	name  string
+	page  api.ActivityPage
+	stats *api.ActivityStats
+}
+
+type ProfilesFetchedMsg struct {
+	state api.ProfileState
+}
+
+// ModelActionMsg reports the outcome of a model action (load / unload /
+// cancel-inflight). The goroutine never touches Model state; Update applies
+// the status and bookkeeping.
+type ModelActionMsg struct {
+	action string // "load", "unload", or "cancel"
+	target string // model name (or request ID for "cancel")
+	err    error
+}
+
+// ProfileSwitchMsg reports the outcome of an active-profile switch.
+type ProfileSwitchMsg struct {
+	name  string
+	state *api.ProfileState
+	err   error
+}
 
 // LogLineMsg is a line from the log stream.
 type LogLineMsg string
@@ -318,20 +356,89 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case SSEMsg:
 		return m.handleSSE(msg)
 
-	case ActivityRefreshMsg:
+	case VersionFetchedMsg:
+		m.version = msg.info
+		return m, nil
+
+	case ActivityFetchedMsg:
+		m.activityPage = msg.page
+		m.totalPages = msg.page.TotalPages
+		m.pageNum = msg.page.Page
 		m.lastActivityRefresh = time.Now()
+		if msg.stats != nil {
+			m.activityStats = msg.stats
+		}
 		return m, nil
 
-	case HardwareRefreshMsg:
+	case HardwareFetchedMsg:
+		m.hardware = msg.hw
 		return m, nil
 
-	case ModelsRefreshMsg:
+	case PerfFetchedMsg:
+		m.applyPerformance(msg.resp)
+		return m, nil
+
+	case ModelsFetchedMsg:
+		m.models = msg.models
+		m.clampSelected()
+		m.selectedModel = ""
+		m.activityScroll = 0
+		m.modelActivity = api.ActivityPage{}
+		m.modelActivityStats = nil
+		return m, nil
+
+	case ModelActivityFetchedMsg:
+		m.modelActivity = msg.page
+		if msg.stats != nil {
+			m.modelActivityStats = msg.stats
+		}
 		// Activity page for the selected model was replaced — reset the
 		// right-pane activity scroll offset.
 		m.activityScroll = 0
 		return m, nil
 
-	case ProfilesRefreshMsg:
+	case ProfilesFetchedMsg:
+		m.activeProfile = msg.state.Active
+		m.profiles = msg.state.Profiles
+		return m, nil
+
+	case ModelActionMsg:
+		m.statusTime = time.Now()
+		if msg.action == "load" {
+			delete(m.loading, msg.target)
+		}
+		switch msg.action {
+		case "load":
+			if msg.err != nil {
+				m.statusMsg = fmt.Sprintf("Failed to load %s: %v", msg.target, msg.err)
+			} else {
+				m.statusMsg = fmt.Sprintf("Loading %s initiated", msg.target)
+			}
+		case "unload":
+			if msg.err != nil {
+				m.statusMsg = fmt.Sprintf("Failed to unload %s: %v", msg.target, msg.err)
+			} else {
+				m.statusMsg = fmt.Sprintf("Unloaded %s", msg.target)
+			}
+		case "cancel":
+			if msg.err != nil {
+				m.statusMsg = fmt.Sprintf("Failed to cancel: %v", msg.err)
+			} else {
+				m.statusMsg = fmt.Sprintf("Cancelled request %s", msg.target)
+			}
+		}
+		// The model set may have changed — reset the right-pane scroll.
+		m.activityScroll = 0
+		return m, nil
+
+	case ProfileSwitchMsg:
+		m.statusTime = time.Now()
+		if msg.err != nil {
+			m.statusMsg = fmt.Sprintf("Failed to switch profile: %v", msg.err)
+			return m, nil
+		}
+		m.activeProfile = msg.state.Active
+		m.statusMsg = fmt.Sprintf("Switched to %s", m.activeProfile)
 		return m, nil
 
 	case LogLineMsg:
@@ -466,10 +573,10 @@ func (m *Model) fetchVersion() tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		v, err := m.client.GetVersion(ctx)
-		if err == nil {
-			m.version = *v
+		if err != nil {
+			return nil
 		}
-		return nil
+		return VersionFetchedMsg{info: *v}
 	}
 }
 
@@ -484,18 +591,10 @@ func (m *Model) fetchActivity() tea.Cmd {
 		if err != nil {
 			return fmt.Errorf("fetch activity: %w", err)
 		}
-		m.activityPage = *page
-		m.lastActivityRefresh = time.Now()
-		m.totalPages = page.TotalPages
-		m.pageNum = page.Page
-
 		ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel2()
-		stats, statsErr := m.client.GetActivityStats(ctx2, "")
-		if statsErr == nil {
-			m.activityStats = stats
-		}
-		return ActivityRefreshMsg{}
+		stats, _ := m.client.GetActivityStats(ctx2, "")
+		return ActivityFetchedMsg{page: *page, stats: stats}
 	}
 }
 
@@ -505,8 +604,7 @@ func (m *Model) fetchHardware() tea.Cmd {
 		if err != nil {
 			return fmt.Errorf("fetch hardware: %w", err)
 		}
-		m.hardware = *hw
-		return HardwareRefreshMsg{}
+		return HardwareFetchedMsg{hw: *hw}
 	}
 }
 
@@ -514,40 +612,45 @@ func (m *Model) fetchHardware() tea.Cmd {
 // per device every 5s. It seeds the latest system stats and per-GPU stats so
 // the live sections render without relying on SSE perf events.
 func (m *Model) fetchPerformance() tea.Cmd {
+	// Capture the cursor on the UI goroutine so the Cmd closure reads no
+	// shared state.
+	cursor := m.perfCursor
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		resp, err := m.client.GetPerformance(ctx, m.perfCursor)
+		resp, err := m.client.GetPerformance(ctx, cursor)
 		if err != nil {
 			return fmt.Errorf("fetch performance: %w", err)
 		}
+		return PerfFetchedMsg{resp: *resp}
+	}
+}
 
-		var lastSys, lastGpu string
-		if n := len(resp.SysStats); n > 0 {
-			m.sysStat = &resp.SysStats[n-1]
-			lastSys = resp.SysStats[n-1].Timestamp
+// applyPerformance merges new performance entries into the latest-stats
+// state. Runs in Update (UI goroutine).
+func (m *Model) applyPerformance(resp api.PerformanceResponse) {
+	var lastSys, lastGpu string
+	if n := len(resp.SysStats); n > 0 {
+		m.sysStat = &resp.SysStats[n-1]
+		lastSys = resp.SysStats[n-1].Timestamp
+	}
+	if len(resp.GpuStats) > 0 {
+		if m.gpuStats == nil {
+			m.gpuStats = make(map[int]*api.GpuStat)
 		}
-		if len(resp.GpuStats) > 0 {
-			if m.gpuStats == nil {
-				m.gpuStats = make(map[int]*api.GpuStat)
+		for i := range resp.GpuStats {
+			gs := resp.GpuStats[i]
+			m.gpuStats[gs.ID] = &gs
+			if gs.Timestamp > lastGpu {
+				lastGpu = gs.Timestamp
 			}
-			for i := range resp.GpuStats {
-				gs := resp.GpuStats[i]
-				m.gpuStats[gs.ID] = &gs
-				if gs.Timestamp > lastGpu {
-					lastGpu = gs.Timestamp
-				}
-			}
 		}
-
-		// Use the older of the two cursors so neither list falls behind.
-		if lastSys != "" && (lastGpu == "" || lastSys <= lastGpu) {
-			m.perfCursor = lastSys
-		} else if lastGpu != "" {
-			m.perfCursor = lastGpu
-		}
-
-		return HardwareRefreshMsg{}
+	}
+	// Use the older of the two cursors so neither list falls behind.
+	if lastSys != "" && (lastGpu == "" || lastSys <= lastGpu) {
+		m.perfCursor = lastSys
+	} else if lastGpu != "" {
+		m.perfCursor = lastGpu
 	}
 }
 
@@ -557,13 +660,7 @@ func (m *Model) fetchModels() tea.Cmd {
 		if err != nil {
 			return fmt.Errorf("fetch models: %w", err)
 		}
-		m.models = models
-		m.clampSelected()
-		m.selectedModel = ""
-		m.activityScroll = 0
-		m.modelActivity = api.ActivityPage{}
-		m.modelActivityStats = nil
-		return ModelsRefreshMsg{}
+		return ModelsFetchedMsg{models: models}
 	}
 }
 
@@ -585,16 +682,13 @@ func (m *Model) fetchModelActivity(modelName string) tea.Cmd {
 			Limit:   30,
 			Order:   "desc",
 		})
-		if err == nil {
-			m.modelActivity = *page
+		if err != nil {
+			return ModelActivityFetchedMsg{name: modelName}
 		}
 		ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel2()
-		stats, statsErr := m.client.GetActivityStats(ctx2, modelName)
-		if statsErr == nil {
-			m.modelActivityStats = stats
-		}
-		return ModelsRefreshMsg{}
+		stats, _ := m.client.GetActivityStats(ctx2, modelName)
+		return ModelActivityFetchedMsg{name: modelName, page: *page, stats: stats}
 	}
 }
 
@@ -604,9 +698,7 @@ func (m *Model) fetchProfiles() tea.Cmd {
 		if err != nil {
 			return fmt.Errorf("fetch profiles: %w", err)
 		}
-		m.activeProfile = state.Active
-		m.profiles = state.Profiles
-		return ProfilesRefreshMsg{}
+		return ProfilesFetchedMsg{state: *state}
 	}
 }
 
@@ -758,13 +850,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer cancel()
 				err := m.client.LoadModel(ctx, name)
-				if err != nil {
-					m.statusMsg = fmt.Sprintf("Failed to load %s: %v", name, err)
-				} else {
-					m.statusMsg = fmt.Sprintf("Loading %s initiated", name)
-				}
-				m.statusTime = time.Now()
-				return ModelsRefreshMsg{}
+				return ModelActionMsg{action: "load", target: name, err: err}
 			}
 		case "esc", "ctrl+c":
 			m.loadModelMode = false
@@ -799,7 +885,6 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.tab = tabLogs
 	case "5":
 		m.tab = tabProfiles
-
 	case "tab", "n":
 		m.tab = (m.tab + 1) % tabCount
 	case "shift+tab", "h", "p":
@@ -933,14 +1018,18 @@ func (m *Model) handleResize(msg tea.WindowSizeMsg) {
 	m.winH = msg.Height
 }
 
+// chromeLines is the fixed chrome around tab content: title (1) +
+// tab bar (3) + status bar (2) + trailing line (1). The sticky header
+// height varies per tab and is added separately.
+const chromeLines = 7
+
 // recalcVP sizes the scrollable viewport to the remaining room after the
-// fixed chrome: title (1) + tab bar (3) + gap (1) + sticky header (varies)
-// + status bar (2).
+// fixed chrome and the sticky header.
 func (m *Model) recalcVP(headerH int) {
 	m.vp.Width = m.winW
-	contentH := m.winH - 7 - headerH
-	if contentH < 4 {
-		contentH = 4
+	contentH := m.winH - chromeLines - headerH
+	if contentH < 1 {
+		contentH = 1
 	}
 	m.vp.Height = contentH
 }
@@ -1075,7 +1164,6 @@ func (m *Model) renderTabHeader() string {
 	}
 	return ""
 }
-
 
 // ---------------------------------------------------------------------------
 // Tab view stubs
