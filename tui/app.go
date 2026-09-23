@@ -235,6 +235,7 @@ type Model struct {
 
 	// Auto-refresh
 	lastActivityRefresh time.Time
+	autoRefreshStarted  bool
 
 	// App version
 	appVersion string
@@ -317,9 +318,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.handleResize(msg)
-		// Start auto-refresh timer on first update
-		if m.lastActivityRefresh.IsZero() {
-			return m, tea.Tick(5*time.Second, func(time.Time) tea.Msg { return nil })
+		// Arm the auto-refresh timer exactly once, on the first window-size
+		// event. Guarded by a dedicated flag (not lastActivityRefresh, which a
+		// completed fetch would otherwise make non-zero and starve the timer).
+		if !m.autoRefreshStarted {
+			m.autoRefreshStarted = true
+			return m, m.autoRefreshTick()
 		}
 		return m, nil
 
@@ -333,15 +337,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case time.Time:
-		// Auto-refresh every 5s: activity on the activity tab, and GPU/system
-		// performance always (the SSE stream does not push perfsys/perfgpu
-		// events, so /api/performance must be polled to keep stats live).
+		// Auto-refresh every 1s: activity on the activity tab, hardware on
+		// the hardware tab, and GPU/system performance always (the SSE stream
+		// does not push perfsys/perfgpu events, so /api/performance must be
+		// polled to keep stats live).
 		var cmds []tea.Cmd
 		if m.tab == tabActivity {
 			cmds = append(cmds, m.fetchActivity())
 		}
+		if m.tab == tabHardware {
+			cmds = append(cmds, m.fetchHardware())
+		}
 		cmds = append(cmds, m.fetchPerformance())
-		cmds = append(cmds, tea.Tick(5*time.Second, func(time.Time) tea.Msg { return nil }))
+		cmds = append(cmds, m.autoRefreshTick())
 		return m, tea.Batch(cmds...)
 
 	case ShutdownMsg:
@@ -992,6 +1000,15 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// autoRefreshTick schedules the next auto-refresh tick. The callback MUST
+// return the timestamp: tea.Tick sends the callback's result into the update
+// loop, and Update relies on `case time.Time` to run the refresh and
+// reschedule the next tick. Returning nil silently kills the chain after the
+// first tick (the nil message falls into the default case and is dropped).
+func (m *Model) autoRefreshTick() tea.Cmd {
+	return tea.Tick(1*time.Second, func(t time.Time) tea.Msg { return t })
 }
 
 func (m *Model) refreshCurrentTab() tea.Cmd {
