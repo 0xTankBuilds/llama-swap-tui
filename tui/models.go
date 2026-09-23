@@ -41,43 +41,21 @@ func (m *Model) renderModelsView() string {
 		return m.renderLoadModelInput()
 	}
 
-	// Split viewport: left 40% for model list, right 60% for details
-	leftW := m.vp.Width / 2
-	if leftW < 30 {
-		leftW = 30
-	}
-	rightW := m.vp.Width - leftW - 2 // -2 for gap
-	if rightW < 30 {
-		rightW = 30
-	}
+	// Split viewport: left for the model list, right for details
+	leftW, rightW := m.modelsPaneWidths()
 
-	// Build left pane (model list)
-	leftContent := m.renderModelList(leftW)
+	// Build left pane inside the viewport (clipped to vp.Height, scrollable)
+	origWidth := m.vp.Width
+	m.vp.Width = leftW
+	m.vp.SetContent(m.renderModelsListBody(leftW))
+	leftContent := m.vp.View()
+	m.vp.Width = origWidth
 
-	// Build right pane (model details + activity)
-	rightContent := m.renderModelDetail(rightW)
+	// Build right pane (model details + activity) — pinned, always full height
+	rightContent := m.renderModelDetail(rightW, m.vp.Height)
 
 	// Join panes with gap
-	var b strings.Builder
-	leftLines := strings.Split(leftContent, "\n")
-	rightLines := strings.Split(rightContent, "\n")
-	maxLines := len(leftLines)
-	if len(rightLines) > maxLines {
-		maxLines = len(rightLines)
-	}
-	for i := 0; i < maxLines; i++ {
-		leftLine := ""
-		if i < len(leftLines) {
-			leftLine = leftLines[i]
-		}
-		rightLine := ""
-		if i < len(rightLines) {
-			rightLine = rightLines[i]
-		}
-		b.WriteString(leftLine + strings.Repeat(" ", 2) + rightLine + "\n")
-	}
-
-	return b.String()
+	return joinPanes(leftContent, rightContent)
 }
 
 func (m *Model) renderLoadModelInput() string {
@@ -101,7 +79,80 @@ func (m *Model) renderLoadModelInput() string {
 	return b.String()
 }
 
-func (m *Model) renderModelList(width int) string {
+// modelsPaneWidths returns the widths for the two Models-tab panes.
+func (m *Model) modelsPaneWidths() (leftW, rightW int) {
+	leftW = m.vp.Width / 2
+	if leftW < 30 {
+		leftW = 30
+	}
+	rightW = m.vp.Width - leftW - 2 // -2 for gap
+	if rightW < 30 {
+		rightW = 30
+	}
+	return
+}
+
+// modelsColumnWidths returns the list column widths for a given pane width.
+func (m *Model) modelsColumnWidths(width int) (nameW, stateW, stratW, descW int) {
+	nameW = width - 20 // reserve space for state, strategy, description
+	if nameW < 15 {
+		nameW = 15
+	}
+	stateW = 10
+	stratW = 12
+	descW = width - nameW - stateW - stratW - 10
+	if descW < 15 {
+		descW = 15
+	}
+	return
+}
+
+// renderModelsHeader renders the sticky one-line header for the Models tab:
+// list column names over the left pane and the selected model's title over
+// the right pane (so the model stays identified while details scroll).
+func (m *Model) renderModelsHeader() string {
+	leftW, rightW := m.modelsPaneWidths()
+	nameW, stateW, stratW, descW := m.modelsColumnWidths(leftW)
+
+	left := fmt.Sprintf("  %-*s %-*s %-*s %s", nameW, "Name", stateW, "State", stratW, "Strategy", strings.Repeat("-", descW))
+
+	right := ""
+	models := m.models // snapshot: fetch goroutine may swap the slice
+	if len(models) > 0 && m.selected >= 0 && m.selected < len(models) {
+		right = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color(colorAccent)).
+			Render(truncate(modelName(models[m.selected]), rightW-2))
+	}
+	return joinPanes(left, right)
+}
+
+// joinPanes joins two pane renderings line by line with a 2-space gap.
+func joinPanes(left, right string) string {
+	leftLines := strings.Split(left, "\n")
+	rightLines := strings.Split(right, "\n")
+	maxLines := len(leftLines)
+	if len(rightLines) > maxLines {
+		maxLines = len(rightLines)
+	}
+	var b strings.Builder
+	for i := 0; i < maxLines; i++ {
+		leftLine := ""
+		if i < len(leftLines) {
+			leftLine = leftLines[i]
+		}
+		rightLine := ""
+		if i < len(rightLines) {
+			rightLine = rightLines[i]
+		}
+		b.WriteString(leftLine + strings.Repeat(" ", 2) + rightLine + "\n")
+	}
+	return strings.TrimSuffix(b.String(), "\n")
+}
+
+// renderModelsListBody renders the left pane body (no sticky header):
+// status message, model rows, in-flight requests and the footer hint.
+func (m *Model) renderModelsListBody(width int) string {
 	var b strings.Builder
 
 	// Status message
@@ -111,24 +162,7 @@ func (m *Model) renderModelList(width int) string {
 			Render(m.statusMsg) + "\n")
 	}
 
-	// Dynamic column widths for left pane
-	nameW := width - 20 // reserve space for state, strategy, description
-	if nameW < 15 {
-		nameW = 15
-	}
-	stateW := 10
-	stratW := 12
-	descW := width - nameW - stateW - stratW - 10
-	if descW < 15 {
-		descW = 15
-	}
-
-	// Table header
-	header := fmt.Sprintf("  %-*s %-*s %-*s %s", nameW, "Name", stateW, "State", stratW, "Strategy", strings.Repeat("-", descW))
-	b.WriteString(lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color(colorAccent)).
-		Render(header) + "\n")
+	nameW, stateW, stratW, descW := m.modelsColumnWidths(width)
 
 	// Model rows
 	if len(m.models) == 0 {
@@ -175,25 +209,26 @@ func (m *Model) renderModelList(width int) string {
 	return b.String()
 }
 
-func (m *Model) renderModelDetail(width int) string {
+func (m *Model) renderModelDetail(width, maxH int) string {
 	var b strings.Builder
 
-	// Safety: clamp selected before any access
-	if len(m.models) > 0 && m.selected >= len(m.models) {
-		m.selected = len(m.models) - 1
+	// Safety: clamp selected before any access.
+	// Snapshot: fetch goroutines may swap in a new slice mid-render.
+	models := m.models
+	if len(models) > 0 && m.selected >= len(models) {
+		m.selected = len(models) - 1
 	}
-	if len(m.models) == 0 || m.selected < 0 || m.selected >= len(m.models) {
+	if len(models) == 0 || m.selected < 0 || m.selected >= len(models) {
 		b.WriteString("  Select a model to see details\n")
-		return b.String()
+		for n := strings.Count(b.String(), "\n"); n < maxH; n++ {
+			b.WriteString("\n")
+		}
+		return strings.TrimSuffix(b.String(), "\n")
 	}
 
-	model := m.models[m.selected]
+	model := models[m.selected]
 
-	// Model info header
-	b.WriteString(lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color(colorAccent)).
-		Render("  " + modelName(model)) + "\n")
+	// Details pane (the model title lives in the sticky header line)
 	b.WriteString(lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorBorder)).
 		Render("  " + strings.Repeat("-", width-4)) + "\n")
@@ -250,21 +285,50 @@ func (m *Model) renderModelDetail(width int) string {
 		))
 	}
 
-	// Activity rows
-	if m.modelActivity.Data == nil || len(m.modelActivity.Data) == 0 {
-		b.WriteString("  No activity for this model.\n")
+	// Activity rows with scrolling.
+	// Snapshot: the fetch goroutine may swap m.modelActivity with a new
+	// page while we are rendering, so iterate the captured slice instead.
+	data := m.modelActivity.Data
+	var rows []string
+	if data == nil || len(data) == 0 {
+		rows = []string{"  No activity for this model."}
 	} else {
-		for i := len(m.modelActivity.Data) - 1; i >= 0; i-- {
-			if i < 0 || i >= len(m.modelActivity.Data) {
-				break
-			}
-			entry := m.modelActivity.Data[i]
-			line := m.renderModelActivityRow(entry, width)
-			b.WriteString(line + "\n")
+		for i := len(data) - 1; i >= 0; i-- {
+			rows = append(rows, m.renderModelActivityRow(data[i], width))
 		}
 	}
 
-	return b.String()
+	// Calculate visible rows based on activityScroll (clamped locally —
+	// the stored value is reset in Update on refresh messages). Cap the
+	// rows so the pane renders exactly maxH lines, even when the fixed
+	// section above is shorter or longer than the terminal allows.
+	start := m.activityScroll
+	if start >= len(rows) {
+		start = 0
+	}
+	visible := maxH - strings.Count(b.String(), "\n")
+	if visible < 0 {
+		// Tiny terminal: trim the fixed section to maxH lines.
+		lines := strings.Split(b.String(), "\n")
+		if len(lines) > maxH {
+			lines = lines[:maxH]
+		}
+		return strings.Join(lines, "\n")
+	}
+	end := start + visible
+	if end > len(rows) {
+		end = len(rows)
+	}
+	for i := start; i < end; i++ {
+		b.WriteString(rows[i] + "\n")
+	}
+
+	// Pad to maxH lines
+	for n := strings.Count(b.String(), "\n"); n < maxH; n++ {
+		b.WriteString("\n")
+	}
+
+	return strings.TrimSuffix(b.String(), "\n")
 }
 
 func (m *Model) renderModelRow(model api.Model, idx int) string {
@@ -417,6 +481,20 @@ func (m *Model) modelScrollUp() tea.Cmd {
 	return m.fetchModelActivity(m.selectedModel)
 }
 
+// modelActivityScrollDown scrolls down the activity rows on the Models tab
+func (m *Model) modelActivityScrollDown() tea.Cmd {
+	m.activityScroll++
+	return nil
+}
+
+// modelActivityScrollUp scrolls up the activity rows on the Models tab
+func (m *Model) modelActivityScrollUp() tea.Cmd {
+	if m.activityScroll > 0 {
+		m.activityScroll--
+	}
+	return nil
+}
+
 func (m *Model) loadSelectedModel() tea.Cmd {
 	if len(m.models) == 0 || m.selected < 0 || m.selected >= len(m.models) {
 		return nil
@@ -430,14 +508,7 @@ func (m *Model) loadSelectedModel() tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		err := m.client.LoadModel(ctx, modelName(model))
-		delete(m.loading, modelName(model))
-		if err != nil {
-			m.statusMsg = fmt.Sprintf("Failed to load %s: %v", modelName(model), err)
-		} else {
-			m.statusMsg = fmt.Sprintf("Loading %s initiated", modelName(model))
-		}
-		m.statusTime = time.Now()
-		return ModelsRefreshMsg{}
+		return ModelActionMsg{action: "load", target: modelName(model), err: err}
 	}
 }
 
@@ -453,13 +524,7 @@ func (m *Model) unloadSelectedModel() tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		err := m.client.UnloadModel(ctx, modelName(model))
-		if err != nil {
-			m.statusMsg = fmt.Sprintf("Failed to unload %s: %v", modelName(model), err)
-		} else {
-			m.statusMsg = fmt.Sprintf("Unloaded %s", modelName(model))
-		}
-		m.statusTime = time.Now()
-		return ModelsRefreshMsg{}
+		return ModelActionMsg{action: "unload", target: modelName(model), err: err}
 	}
 }
 
@@ -475,12 +540,6 @@ func (m *Model) cancelSelectedRequest() tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		err := m.client.CancelInflightRequest(ctx, req.ID)
-		if err != nil {
-			m.statusMsg = fmt.Sprintf("Failed to cancel: %v", err)
-		} else {
-			m.statusMsg = fmt.Sprintf("Cancelled request %s", req.ID)
-		}
-		m.statusTime = time.Now()
-		return ModelsRefreshMsg{}
+		return ModelActionMsg{action: "cancel", target: req.ID, err: err}
 	}
 }

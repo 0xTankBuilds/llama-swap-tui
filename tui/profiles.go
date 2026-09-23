@@ -25,21 +25,8 @@ type profilesView struct {
 // Render
 // ---------------------------------------------------------------------------
 
-func (m *Model) renderProfilesView() string {
-	if m.errMsg != "" {
-		return lipgloss.NewStyle().
-			Foreground(lipgloss.Color(colorStatusError)).
-			Render("Error: " + m.errMsg)
-	}
-
+func (m *Model) renderProfilesHeader() string {
 	var b strings.Builder
-
-	// Status message
-	if m.statusMsg != "" && time.Since(m.statusTime) < 5*time.Second {
-		b.WriteString(lipgloss.NewStyle().
-			Foreground(lipgloss.Color(colorLoading)).
-			Render("  "+m.statusMsg) + "\n")
-	}
 
 	// Dynamic column widths
 	idW := 24
@@ -55,6 +42,25 @@ func (m *Model) renderProfilesView() string {
 	b.WriteString(lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorBorder)).
 		Render("  " + strings.Repeat("-", idW+descW+4)) + "\n")
+	return b.String()
+}
+
+func (m *Model) renderProfilesBody() string {
+	var b strings.Builder
+
+	// Status message
+	if m.statusMsg != "" && time.Since(m.statusTime) < 5*time.Second {
+		b.WriteString(lipgloss.NewStyle().
+			Foreground(lipgloss.Color(colorLoading)).
+			Render("  "+m.statusMsg) + "\n")
+	}
+
+	// Dynamic column widths
+	idW := 24
+	descW := m.vp.Width - idW - 20 // 20 = space for " ◉ active" indicator + padding
+	if descW < 20 {
+		descW = 20
+	}
 
 	// Fetch profiles if we don't have any
 	if len(m.profiles) == 0 {
@@ -147,13 +153,6 @@ func (m *Model) switchSelectedProfile() tea.Cmd {
 		defer cancel()
 		name := profile.ID
 		state, err := m.client.SetActiveProfile(ctx, &name)
-		if err != nil {
-			m.statusMsg = fmt.Sprintf("Failed to switch profile: %v", err)
-		} else {
-			m.activeProfile = state.Active
-			m.statusMsg = fmt.Sprintf("Switched to %s", m.activeProfile)
-		}
-		m.statusTime = time.Now()
-		return ProfilesRefreshMsg{}
+		return ProfileSwitchMsg{name: name, state: state, err: err}
 	}
 }

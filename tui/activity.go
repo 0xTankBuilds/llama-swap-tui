@@ -47,12 +47,13 @@ func (m *Model) renderActivityView() string {
 			Render("Error: " + m.errMsg)
 	}
 
-	// Render content and apply horizontal scroll
-	raw := m.renderActivityContent()
-	return applyHScroll(raw, m.hScrollOffset, m.vp.Width)
+	// Render body and apply horizontal scroll. The header is sticky above
+	// the viewport but shares the same offset so columns stay aligned.
+	raw := m.renderActivityBody()
+	return hScrollLines(raw, m.activityOffset(), m.vp.Width)
 }
 
-func (m *Model) renderActivityContent() string {
+func (m *Model) renderActivityBody() string {
 	var b strings.Builder
 
 	// In-flight requests section (at top)
@@ -87,9 +88,6 @@ func (m *Model) renderActivityContent() string {
 		b.WriteString(m.renderActivityStats())
 		b.WriteString("\n")
 	}
-
-	// Table header
-	b.WriteString(m.renderActivityHeader())
 
 	// Table rows — most recent at the top (Data is returned in desc order)
 	if len(m.activityPage.Data) == 0 {
@@ -138,9 +136,19 @@ func applyHScroll(content string, offset, width int) string {
 	if maxOffset := max(0, maxLen-width); offset > maxOffset {
 		offset = maxOffset
 	}
+	return hScrollLines(content, offset, width)
+}
 
+// hScrollLines clips each line to width starting at offset, with no offset
+// clamping. Callers that share one offset across multiple blocks (header +
+// body) must clamp it against the widest line of all blocks first (see
+// activityOffset).
+func hScrollLines(content string, offset, width int) string {
+	if offset < 0 {
+		offset = 0
+	}
 	var b strings.Builder
-	for _, line := range lines {
+	for _, line := range strings.Split(content, "\n") {
 		if width > 0 {
 			b.WriteString(ansi.Cut(line, offset, offset+width))
 		} else {
@@ -201,8 +209,9 @@ func (m *Model) useTokenColumns() bool {
 	return m.vp.Width >= activityFixedWidth(true) + minPathWidth
 }
 
-func (m *Model) renderActivityHeader() string {
-	// Render full-width header (no truncation) - scrolling handles visibility
+// renderActivityHeaderRaw builds the two header lines (column row +
+// separator) without styling or scrolling.
+func (m *Model) renderActivityHeaderRaw() string {
 	header := fmt.Sprintf("  %-*s %-*s %-*s %-*s",
 		colID, "ID", colTime, "Time", colModel, "Model", colStatus, "Status")
 	if m.useTokenColumns() {
@@ -210,13 +219,43 @@ func (m *Model) renderActivityHeader() string {
 	}
 	header += fmt.Sprintf(" %-*s %-*s %-*s %s",
 		colPrefill, "P/s", colDecode, "D/s", colDur, "Duration", "Path")
+	return header + "\n" + strings.Repeat("-", ansi.StringWidth(header)) + "\n"
+}
+
+func (m *Model) renderActivityHeader() string {
+	raw := strings.SplitN(m.renderActivityHeaderRaw(), "\n", 3)
+	header := raw[0]
 	sep := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorBorder)).
-		Render(strings.Repeat("-", ansi.StringWidth(header)))
-	return lipgloss.NewStyle().
+		Render(raw[1])
+	h := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color(colorAccent)).
 		Render(header) + "\n" + sep + "\n"
+	// H-scroll with the body's shared offset so columns stay aligned.
+	return hScrollLines(h, m.activityOffset(), m.vp.Width)
+}
+
+// activityOffset is the horizontal scroll offset shared by the sticky
+// header and the body rows, clamped against the widest line of either so
+// the two can never scroll out of step.
+func (m *Model) activityOffset() int {
+	maxW := 0
+	for _, l := range strings.Split(m.renderActivityHeaderRaw(), "\n") {
+		if w := ansi.StringWidth(l); w > maxW {
+			maxW = w
+		}
+	}
+	for _, l := range strings.Split(m.renderActivityBody(), "\n") {
+		if w := ansi.StringWidth(l); w > maxW {
+			maxW = w
+		}
+	}
+	off := max(0, m.hScrollOffset)
+	if maxOff := max(0, maxW-m.vp.Width); off > maxOff {
+		off = maxOff
+	}
+	return off
 }
 
 func (m *Model) renderActivityRow(entry api.ActivityLogEntry, idx int) string {
