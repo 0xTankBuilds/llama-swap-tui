@@ -93,14 +93,13 @@ func (m *Model) modelsPaneWidths() (leftW, rightW int) {
 }
 
 // modelsColumnWidths returns the list column widths for a given pane width.
-func (m *Model) modelsColumnWidths(width int) (nameW, stateW, stratW, descW int) {
-	nameW = width - 20 // reserve space for state, strategy, description
+func (m *Model) modelsColumnWidths(width int) (nameW, stateW, descW int) {
+	nameW = width - 20 // give name most space; state + desc get the rest
 	if nameW < 15 {
 		nameW = 15
 	}
 	stateW = 10
-	stratW = 12
-	descW = width - nameW - stateW - stratW - 10
+	descW = width - nameW - stateW - 10
 	if descW < 15 {
 		descW = 15
 	}
@@ -112,9 +111,9 @@ func (m *Model) modelsColumnWidths(width int) (nameW, stateW, stratW, descW int)
 // the right pane (so the model stays identified while details scroll).
 func (m *Model) renderModelsHeader() string {
 	leftW, rightW := m.modelsPaneWidths()
-	nameW, stateW, stratW, descW := m.modelsColumnWidths(leftW)
+	nameW, stateW, descW := m.modelsColumnWidths(leftW)
 
-	left := fmt.Sprintf("  %-*s %-*s %-*s %s", nameW, "Name", stateW, "State", stratW, "Strategy", strings.Repeat("-", descW))
+	left := fmt.Sprintf("  %-*s %-*s %s", nameW, "Name", stateW, "State", strings.Repeat("-", descW))
 
 	right := ""
 	models := m.models // snapshot: fetch goroutine may swap the slice
@@ -162,14 +161,14 @@ func (m *Model) renderModelsListBody(width int) string {
 			Render(m.statusMsg) + "\n")
 	}
 
-	nameW, stateW, stratW, descW := m.modelsColumnWidths(width)
+	nameW, stateW, descW := m.modelsColumnWidths(width)
 
 	// Model rows
 	if len(m.models) == 0 {
 		b.WriteString("  No models configured.\n")
 	} else {
 		for i, model := range m.models {
-			line := m.renderModelRowCompact(model, i, nameW, stateW, stratW, descW)
+			line := m.renderModelRowCompact(model, i, nameW, stateW, descW)
 			b.WriteString(line + "\n")
 		}
 	}
@@ -352,28 +351,21 @@ func (m *Model) renderModelRow(model api.Model, idx int) string {
 		stateColor = colorLoading
 	}
 
-	strategy := "-"
-	if model.Strategy != "" {
-		strategy = model.Strategy
-	}
-
 	nameW := 28
 	stateW := 10
-	stratW := 14
-	descW := m.vp.Width - nameW - stateW - stratW - 14
+	descW := m.vp.Width - nameW - stateW - 12
 	if descW < 20 {
 		descW = 20
 	}
 
-	return fmt.Sprintf("  %-*s %-*s %-*s %s",
+	return fmt.Sprintf("  %-*s %-*s %s",
 		nameW, truncate(modelName(model), nameW-1),
 		stateW, lipgloss.NewStyle().Foreground(lipgloss.Color(stateColor)).Render(stateStr),
-		stratW, truncate(strategy, stratW-1),
 		truncate(model.Description, descW),
 	)
 }
 
-func (m *Model) renderModelRowCompact(model api.Model, idx int, nameW, stateW, stratW, descW int) string {
+func (m *Model) renderModelRowCompact(model api.Model, idx int, nameW, stateW, descW int) string {
 	stateColor := colorStatusStopped
 	switch model.State {
 	case api.ModelReady:
@@ -394,15 +386,9 @@ func (m *Model) renderModelRowCompact(model api.Model, idx int, nameW, stateW, s
 		stateColor = colorLoading
 	}
 
-	strategy := "-"
-	if model.Strategy != "" {
-		strategy = model.Strategy
-	}
-
-	line := fmt.Sprintf("  %-*s %-*s %-*s %s",
+	line := fmt.Sprintf("  %-*s %-*s %s",
 		nameW, truncate(modelName(model), nameW-1),
 		stateW, lipgloss.NewStyle().Foreground(lipgloss.Color(stateColor)).Render(stateStr),
-		stratW, truncate(strategy, stratW-1),
 		truncate(model.Description, descW),
 	)
 	if idx == m.selected {
