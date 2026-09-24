@@ -25,7 +25,8 @@ import (
 type tab int
 
 const (
-	tabActivity tab = iota
+	tabStatus tab = iota
+	tabActivity
 	tabModels
 	tabHardware
 	tabLogs
@@ -35,6 +36,8 @@ const (
 
 func (t tab) String() string {
 	switch t {
+	case tabStatus:
+		return "Status"
 	case tabActivity:
 		return "Activity"
 	case tabModels:
@@ -99,8 +102,11 @@ type VersionFetchedMsg struct {
 }
 
 type ActivityFetchedMsg struct {
-	page  api.ActivityPage
 	stats *api.ActivityStats
+}
+
+type ActivityPageFetchedMsg struct {
+	page api.ActivityPage
 }
 
 type HardwareFetchedMsg struct {
@@ -276,7 +282,7 @@ type Model struct {
 func NewModel(client *api.Client, version string) *Model {
 	m := &Model{
 		client:   client,
-		tab:      tabActivity,
+		tab:      tabStatus,
 		conn:     connDisconnected,
 		logMax:   500,
 		help:     help.New(),
@@ -307,6 +313,7 @@ func (m *Model) Init() tea.Cmd {
 		m.fetchVersion(),
 		m.fetchModels(),
 		m.fetchActivity(),
+		m.fetchActivityPage(),
 		m.fetchProfiles(),
 		m.fetchHardware(),
 		m.fetchPerformance(),
@@ -369,13 +376,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case ActivityFetchedMsg:
-		m.activityPage = msg.page
-		m.totalPages = msg.page.TotalPages
-		m.pageNum = msg.page.Page
 		m.lastActivityRefresh = time.Now()
 		if msg.stats != nil {
 			m.activityStats = msg.stats
 		}
+		return m, nil
+
+	case ActivityPageFetchedMsg:
+		m.activityPage = msg.page
 		return m, nil
 
 	case HardwareFetchedMsg:
@@ -495,6 +503,11 @@ func (m *Model) View() string {
 
 	// Tab content — scrollable body
 	switch m.tab {
+	case tabStatus:
+		m.recalcVP(0)
+		m.vp.SetContent(m.renderDashboard())
+		b.WriteString(m.vp.View())
+		b.WriteString("\n")
 	case tabModels:
 		// Models renders its own two-pane layout (left scrolls in the
 		// viewport, right pane pinned), so it writes directly.
@@ -592,7 +605,7 @@ func (m *Model) fetchActivity() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		page, err := m.client.GetActivity(ctx, api.ActivityQueryParams{
+		_, err := m.client.GetActivity(ctx, api.ActivityQueryParams{
 			Limit: 50,
 			Order: "desc",
 		})
@@ -602,7 +615,22 @@ func (m *Model) fetchActivity() tea.Cmd {
 		ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel2()
 		stats, _ := m.client.GetActivityStats(ctx2, "")
-		return ActivityFetchedMsg{page: *page, stats: stats}
+		return ActivityFetchedMsg{stats: stats}
+	}
+}
+
+func (m *Model) fetchActivityPage() tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		result, err := m.client.GetActivity(ctx, api.ActivityQueryParams{
+			Limit: 10,
+			Order: "desc",
+		})
+		if err != nil {
+			return fmt.Errorf("fetch activity page: %w", err)
+		}
+		return ActivityPageFetchedMsg{page: *result}
 	}
 }
 
@@ -892,14 +920,16 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.refreshCurrentTab()
 
 	case "1":
-		m.tab = tabActivity
+		m.tab = tabStatus
 	case "2":
-		m.tab = tabModels
+		m.tab = tabActivity
 	case "3":
-		m.tab = tabHardware
+		m.tab = tabModels
 	case "4":
-		m.tab = tabLogs
+		m.tab = tabHardware
 	case "5":
+		m.tab = tabLogs
+	case "6":
 		m.tab = tabProfiles
 	case "tab", "n":
 		m.tab = (m.tab + 1) % tabCount
@@ -1021,6 +1051,8 @@ func (m *Model) autoRefreshTick() tea.Cmd {
 
 func (m *Model) refreshCurrentTab() tea.Cmd {
 	switch m.tab {
+	case tabStatus:
+		return tea.Batch(m.fetchVersion(), m.fetchModels(), m.fetchActivityPage(), m.fetchHardware(), m.fetchPerformance())
 	case tabActivity:
 		return m.fetchActivity()
 	case tabHardware:
@@ -1146,7 +1178,7 @@ func (m *Model) renderStatusBar() string {
 
 func (m *Model) renderHelpOverlay() string {
 	overlay := lipgloss.NewStyle().
-		Width(60).
+		Width(65).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color(colorAccent)).
 		Render(
@@ -1156,12 +1188,13 @@ func (m *Model) renderHelpOverlay() string {
 				"  r                Refresh current tab\n" +
 				"  1-5              Switch tabs\n" +
 				"  tab / shift+tab  Next / prev tab\n\n" +
-				"  Activity (1):  j/k scroll  pgup/pgdown pages\n" +
-				"  Models (2):    j/k navigate  l=load  L=name  u=unload  x=cancel\n" +
+				"  Activity (2):  j/k scroll  pgup/pgdown pages\n" +
+				"  Models (3):    j/k navigate  l=load  L=name  u=unload  x=cancel\n" +
 				"                  pgup/pgdown scroll activity rows\n" +
-				"  Hardware (3):  j/k scroll  pgup/pgdown pages  r refresh\n" +
-				"  Logs (4):      f cycle filter  end=scroll to bottom\n" +
-				"  Profiles (5):  j/k navigate  enter=switch",
+				"  Hardware (4):  j/k scroll  pgup/pgdown pages  r refresh\n" +
+				"  Logs (5):      f cycle filter  end=scroll to bottom\n" +
+				"  Profiles (6):  j/k navigate  enter=switch\n" +
+				"  Status (1):    j/k scroll  r refresh",
 		)
 	return lipgloss.NewStyle().
 		Width(80).
@@ -1176,6 +1209,8 @@ func (m *Model) renderHelpOverlay() string {
 
 func (m *Model) renderTabHeader() string {
 	switch m.tab {
+	case tabStatus:
+		return ""
 	case tabActivity:
 		return m.renderActivityHeader()
 	case tabModels:
