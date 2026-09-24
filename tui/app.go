@@ -729,7 +729,15 @@ func (m *Model) handleSSE(msg SSEMsg) (tea.Model, tea.Cmd) {
 			if envelope.Data != nil {
 				switch v := envelope.Data.(type) {
 				case string:
-					msg.Data = v
+					// The data may be a JSON-encoded string (double-encoded).
+					// Unwrap it so the inner handler can parse the real payload.
+					var inner any
+					if err := json.Unmarshal([]byte(v), &inner); err == nil {
+						b, _ := json.Marshal(inner)
+						msg.Data = string(b)
+					} else {
+						msg.Data = v
+					}
 				case map[string]any:
 					b, _ := json.Marshal(v)
 					msg.Data = string(b)

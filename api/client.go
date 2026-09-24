@@ -406,6 +406,9 @@ func (c *Client) GetModels(ctx context.Context) ([]Model, error) {
 			ID          string                 `json:"id"`
 			Name        string                 `json:"name"`
 			Description string                 `json:"description"`
+			Status      struct {
+				Value string `json:"value"`
+			} `json:"status"`
 			Capabilities *ModelCapabilities  `json:"capabilities,omitempty"`
 			ContextLength int                  `json:"context_length,omitempty"`
 			Meta         map[string]any         `json:"meta"`
@@ -423,6 +426,18 @@ func (c *Client) GetModels(ctx context.Context) ([]Model, error) {
 			Description:   d.Description,
 			Capabilities:  d.Capabilities,
 			ContextLength: d.ContextLength,
+		}
+		// Map the /v1/models status value to a ModelStatus.
+		// "loaded" → ready, "unloaded" → stopped, anything else → unknown.
+		switch d.Status.Value {
+		case "loaded":
+			m.State = ModelReady
+		case "unloaded":
+			m.State = ModelStopped
+		default:
+			if d.Status.Value != "" {
+				m.State = ModelUnknown
+			}
 		}
 		if meta, ok := d.Meta["llamaswap"].(map[string]any); ok {
 			if aliases, ok := meta["aliases"].([]any); ok {

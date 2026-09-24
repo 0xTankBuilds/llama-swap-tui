@@ -56,6 +56,39 @@ func (m *Model) renderActivityView() string {
 func (m *Model) renderActivityBody() string {
 	var b strings.Builder
 
+	// Currently loaded models section (at top)
+	if len(m.models) > 0 {
+		loaded := []string{}
+		for _, model := range m.models {
+			if model.State == api.ModelReady {
+				// Use ID since the Name field is empty in both REST and SSE responses
+				loaded = append(loaded, model.ID)
+			}
+		}
+		if len(loaded) > 0 {
+			modelsStr := strings.Join(loaded, ", ")
+			b.WriteString(lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color(colorAccentMuted)).
+				Render("  Loaded Models: ") +
+				lipgloss.NewStyle().
+					Foreground(lipgloss.Color(colorStatusReady)).
+					Render(modelsStr))
+			b.WriteString("\n")
+		} else {
+			b.WriteString(lipgloss.NewStyle().
+				Foreground(lipgloss.Color(colorTextTertiary)).
+				Render("  No models loaded."))
+			b.WriteString("\n")
+		}
+	} else if m.conn != connDisconnected {
+		// Connected but no model data yet
+		b.WriteString(lipgloss.NewStyle().
+			Foreground(lipgloss.Color(colorTextTertiary)).
+			Render("  No models available."))
+		b.WriteString("\n")
+	}
+
 	// In-flight requests section (at top)
 	if len(m.inflight) > 0 {
 		b.WriteString(lipgloss.NewStyle().
