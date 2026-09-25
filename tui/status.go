@@ -418,8 +418,8 @@ func (m *Model) renderActivityCard() string {
 }
 
 func (m *Model) renderDashboardActivityRow(entry api.ActivityLogEntry, mw int) string {
-	// Time
-	t := entry.Timestamp
+	// Time (system local timezone)
+	t := entry.Timestamp.Local()
 	timeStr := fmt.Sprintf("%02d:%02d:%02d", t.Hour(), t.Minute(), t.Second())
 
 	// Model (full name, truncated to column width, padded before styling)

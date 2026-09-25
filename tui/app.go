@@ -352,6 +352,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.tab == tabActivity {
 			cmds = append(cmds, m.fetchActivity())
 		}
+		if m.tab == tabStatus {
+			cmds = append(cmds, m.fetchActivityPage())
+		}
 		if m.tab == tabHardware {
 			cmds = append(cmds, m.fetchHardware())
 		}
