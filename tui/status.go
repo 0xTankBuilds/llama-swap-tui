@@ -8,6 +8,7 @@ import (
 	"llama-swap-tui/api"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // ---------------------------------------------------------------------------
@@ -17,13 +18,17 @@ import (
 // cardHeader renders a colored left-bar + bold title for a dashboard card.
 func (m *Model) cardHeader(title, color string) string {
 	return lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Render("┃") +
-		lipgloss.NewStyle().Bold(true).Render(" " + title) + "\n" +
+		lipgloss.NewStyle().Bold(true).Render(" "+title) + "\n" +
 		m.divider() + "\n"
 }
 
-// divider renders a wide section divider spanning the viewport.
+// divider renders a section divider spanning a bounded slice of the viewport.
+// The width is capped so four stacked cards don't each draw a full-width rule.
 func (m *Model) divider() string {
 	w := m.vp.Width - 4
+	if w > 40 {
+		w = 40
+	}
 	if w < 20 {
 		w = 20
 	}
@@ -65,7 +70,7 @@ func (m *Model) renderDashboard() string {
 func (m *Model) renderInflightCard() string {
 	var b strings.Builder
 
-	b.WriteString(m.cardHeader("In-flight", colorStatusWarning))
+	b.WriteString(m.cardHeader("In-flight", colorAccent))
 
 	if len(m.inflight) == 0 {
 		b.WriteString(lipgloss.NewStyle().
@@ -86,7 +91,7 @@ func (m *Model) renderInflightCard() string {
 	avgElapsed := totalElapsed / int64(len(m.inflight))
 
 	b.WriteString("  " +
-		lipgloss.NewStyle().Foreground(lipgloss.Color(colorStatusError)).Bold(true).Render(fmt.Sprintf("%d active", len(m.inflight))) +
+		lipgloss.NewStyle().Foreground(lipgloss.Color(colorTextPrimary)).Bold(true).Render(fmt.Sprintf("%d active", len(m.inflight))) +
 		"  │  Longest: " +
 		lipgloss.NewStyle().Foreground(lipgloss.Color(colorTextPrimary)).Render(humanDuration(longest)) +
 		"  │  Avg: " +
@@ -136,8 +141,12 @@ func (m *Model) renderInflightRow(r api.InflightRequestEntry) string {
 	elapsedStr := humanDuration(elapsed)
 	const elapsedW = 5
 
-	// Model name fills the remaining width
+	// Model name fills the remaining width (capped so wide terminals don't
+	// sprawl; kept readable on narrow ones).
 	modelW := m.vp.Width - (2 + 1 + barW + 1 + elapsedW + 1 + 2)
+	if modelW > 44 {
+		modelW = 44
+	}
 	if modelW < 10 {
 		modelW = 10
 	}
@@ -337,16 +346,31 @@ func (m *Model) renderGpuRow(gs *api.GpuStat, barW int) string {
 // ---------------------------------------------------------------------------
 
 const (
-	actTimeW  = 8 // "15:43:59"
-	actStatus = 5 // "200"
-	actRateW  = 6 // "1234" tokens/s
-	actDurW   = 6 // "1m6s"
+	actTimeW   = 8 // "15:43:59"
+	actStatusW = 6 // "✓200" symbol + code
+	actRateW   = 6 // "Prompt" / "Decode"
+	actDurW    = 6 // "1m6s"
 )
 
-// activityModelW computes the dynamic model-name column width so rows
-// stretch to the full viewport width.
+// statusSymbol returns a color-coded emoji prefix for an HTTP status code.
+func statusSymbol(code int) string {
+	if code >= 500 {
+		return "\u2717" // ✗
+	}
+	if code >= 400 {
+		return "\u26a0\ufe0f" // ⚠️
+	}
+	return "\u2713" // ✓
+}
+
+// activityModelW computes the dynamic model-name column width so rows stretch
+// toward the full viewport width, but never sprawl past a cap on wide
+// terminals and stay readable on narrow ones.
 func (m *Model) activityModelW() int {
-	w := m.vp.Width - (2 + actTimeW + 2 + actStatus + 2 + actRateW + 2 + actRateW + 2 + actDurW)
+	w := m.vp.Width - (2 + actTimeW + 2 + actStatusW + 2 + actRateW + 2 + actRateW + 2 + actDurW)
+	if w > 44 {
+		w = 44
+	}
 	if w < 12 {
 		w = 12
 	}
@@ -355,11 +379,14 @@ func (m *Model) activityModelW() int {
 
 // padPlain right-pads a plain (non-styled) string to width w so that
 // lipgloss styling applied afterwards does not break fmt column alignment.
+// Padding uses display width, not byte length, so multi-byte status symbols
+// (✓ ⚠ ✗) stay aligned with ASCII columns.
 func padPlain(s string, w int) string {
-	if len(s) >= w {
+	wid := ansi.StringWidth(s)
+	if wid >= w {
 		return s
 	}
-	return s + strings.Repeat(" ", w-len(s))
+	return s + strings.Repeat(" ", w-wid)
 }
 
 func (m *Model) renderActivityCard() string {
@@ -383,9 +410,9 @@ func (m *Model) renderActivityCard() string {
 	b.WriteString("  " +
 		label(padPlain("Time", actTimeW)) + "  " +
 		label(padPlain("Model", mw)) + "  " +
-		label(padPlain("Status", actStatus)) + "  " +
-		label(padPlain("P/s", actRateW)) + "  " +
-		label(padPlain("D/s", actRateW)) + "  " +
+		label(padPlain("Status", actStatusW)) + "  " +
+		label(padPlain("Prompt", actRateW)) + "  " +
+		label(padPlain("Decode", actRateW)) + "  " +
 		label(padPlain("Dur", actDurW)) +
 		"\n")
 
@@ -393,7 +420,7 @@ func (m *Model) renderActivityCard() string {
 	b.WriteString("  " +
 		strings.Repeat("─", actTimeW) + "  " +
 		strings.Repeat("─", mw) + "  " +
-		strings.Repeat("─", actStatus) + "  " +
+		strings.Repeat("─", actStatusW) + "  " +
 		strings.Repeat("─", actRateW) + "  " +
 		strings.Repeat("─", actRateW) + "  " +
 		strings.Repeat("─", actDurW) +
@@ -435,7 +462,7 @@ func (m *Model) renderDashboardActivityRow(entry api.ActivityLogEntry, mw int) s
 		statusColor = colorStatusWarning
 	}
 	status := lipgloss.NewStyle().Foreground(lipgloss.Color(statusColor)).
-		Render(padPlain(fmt.Sprintf("%d", entry.RespStatusCode), actStatus))
+		Render(padPlain(fmt.Sprintf("%s%d", statusSymbol(entry.RespStatusCode), entry.RespStatusCode), actStatusW))
 
 	// Throughput rates (prompt/s, decode/s)
 	ps := lipgloss.NewStyle().Foreground(lipgloss.Color(colorInfo)).
