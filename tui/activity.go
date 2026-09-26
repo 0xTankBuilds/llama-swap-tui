@@ -302,7 +302,7 @@ func (m *Model) renderActivityRow(entry api.ActivityLogEntry, idx int) string {
 		statusColor = colorStatusStarting
 	}
 
-	statusStr := lipgloss.NewStyle().Foreground(lipgloss.Color(statusColor)).Render(fmt.Sprintf("%d", entry.RespStatusCode))
+	statusStr := lipgloss.NewStyle().Foreground(lipgloss.Color(statusColor)).Render(fmt.Sprintf("%s%d", statusSymbol(entry.RespStatusCode), entry.RespStatusCode))
 	cachedStr := humanTokens(entry.Tokens.CachedTokens)
 	inStr := humanTokens(entry.Tokens.InputTokens)
 	outStr := humanTokens(entry.Tokens.OutputTokens)
