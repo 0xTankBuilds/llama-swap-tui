@@ -27,6 +27,8 @@ llama-swap-tui/
 │   ├── hscroll_test.go  # Horizontal scroll unit tests
 │   └── performance_test.go  # Live integration test
 ├── docs/screenshots/    # Screenshot images for README
+├── scripts/
+│   └── mkshot.py        # Screenshot renderer (tmux ANSI capture → PNG)
 ├── .tmp/web/            # Transient web state (ignored)
 └── llama-swap-tui       # Built binary (ignored)
 ```
@@ -50,6 +52,20 @@ llama-swap-tui/
 ## TESTS
 *   `tui/hscroll_test.go` — Unit tests for horizontal scrolling with ANSI escape sequences, offset clamping, and adaptive column rendering.
 *   `tui/performance_test.go` — Live integration test that hits a running llama-swap instance at `localhost:8080`. Use `t.Skipf` when the backend is unreachable.
+
+## SCREENSHOTS
+Tab screenshots in `docs/screenshots/` are captured from a **live** TUI session: tmux → ANSI capture → Pillow render via `scripts/mkshot.py`. The TUI requires a real TTY (`/dev/tty`), so it cannot run headless in a plain subprocess.
+
+1. Detached tmux session + fixed pane size. `new-session -x/-y` is ignored for detached sessions; only `resize-window` sizes the pane:
+   `tmux new-session -c <repo> -d -s tui && tmux resize-window -t tui -x 128 -y 32 && tmux send-keys -t tui './llama-swap-tui' Enter`
+2. Wait a few seconds for the initial SSE/REST fetch, then switch tabs with number keys — `1`=Status, `2`=Activity, `3`=Models, `4`=Hardware, `5`=Logs, `6`=Profiles — and wait ~2s (the 1s auto-refresh tick keeps redrawing the pane).
+3. Capture each tab with ANSI colors (tmux 3.4 has no file argument; `-p` writes to stdout → redirect):
+   `tmux capture-pane -t tui -e -p > /tmp/screenshots/<name>.ansi`
+4. Render (DejaVu Sans Mono, 128 cols → 1280 px; reads `/tmp/screenshots/` by default):
+   `python3 scripts/mkshot.py docs/screenshots <name>,...`
+5. Verify by reading the PNG back with PIL: the title row `llama-swap-tui [host]` must be visible. The app fits output exactly into `winH` rows, so a tab that overflows loses its title to scroll (the Status tab had exactly this bug).
+
+Note: the Logs tab tails `/logs/stream` live — if it's empty ("No logs yet"), trigger a model load/unload from the Models tab (`L` = load prompt) before capturing. Quit the TUI with `q` before killing the tmux session.
 
 ## ARCHITECTURE NOTES
 *   **Two communication channels** to llama-swap:
