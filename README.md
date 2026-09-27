@@ -1,21 +1,29 @@
 # llama-swap-tui
 
-A terminal UI (TUI) for [llama-swap](https://github.com/binfelipe/llama-swap) — monitor model swaps, request activity, hardware stats, and more from your terminal.
+A terminal UI (TUI) for [llama-swap](https://github.com/binfelipe/llama-swap) — monitor model swaps, request activity, hardware stats, in-flight requests, GPU metrics, and more from your terminal.
 
 ![llama-swap-tui](https://img.shields.io/badge/go-1.24+-blue)
 ![llama-swap-tui](https://img.shields.io/badge/license-MIT-green)
 
 ## Features
 
+- **Status Dashboard (Tab 1)** — 4-card real-time overview: In-flight requests (with elapsed bars), Loaded Models (state breakdown), GPU (VRAM/util/power bars), and Recent Activity (last 10 requests, auto-refreshing every 1s)
 - **Activity Tab** — Paginated request log with status codes, token metrics, and throughput stats; horizontal scrolling with adaptive columns that keep prefill/decode (P/s, D/s) visible on narrow terminals
 - **Models Tab** — List all configured models with color-coded states (ready/starting/stopped/shutdown); load models by selection or by name, unload models, and cancel in-flight requests
 - **Hardware Tab** — CPU model, core count, memory, accelerators/GPUs, per-core CPU utilization bars, memory/swap usage bars, and live multi-GPU performance (temperature, VRAM, fan speed, power draw)
 - **Logs Tab** — Live streaming logs with source filtering (All / Proxy / Upstream)
 - **Profiles Tab** — View and switch between named model pinning profiles
-- **Real-time Updates** — SSE-powered live updates for model status, activity, in-flight requests, and logs; live hardware/GPU performance polled every 5s from `/api/performance`
+- **Real-time Updates** — SSE-powered live updates for model status, activity, in-flight requests, and logs; live hardware/GPU performance polled every 5s from `/api/performance`; Status dashboard auto-refreshes every 1s
 - **Keyboard-driven** — Full keyboard navigation with tab-specific shortcuts
 
 ## Screenshots
+
+### Status Dashboard
+Real-time overview of in-flight requests, loaded models, GPU metrics, and recent activity.
+
+> _Screenshot not yet captured._
+
+![Status Dashboard](docs/screenshots/status.png)
 
 ### Activity Tab
 Shows paginated request logs with color-coded HTTP status codes, token metrics, and throughput statistics.
@@ -75,16 +83,23 @@ export LLAMA_SWAP_URL=http://your-llama-swap-host:8080
 | `q` / `Ctrl+C` | Quit the TUI |
 | `r` | Refresh the current tab |
 | `?` | Toggle the help overlay |
-| `1` | Switch to Activity tab |
-| `2` | Switch to Models tab |
-| `3` | Switch to Hardware tab |
-| `4` | Switch to Logs tab |
-| `5` | Switch to Profiles tab |
+| `1` | Switch to Status tab |
+| `2` | Switch to Activity tab |
+| `3` | Switch to Models tab |
+| `4` | Switch to Hardware tab |
+| `5` | Switch to Logs tab |
+| `6` | Switch to Profiles tab |
 | `Tab` / `Shift+Tab` | Next / Previous tab |
 
 ### Tab-specific shortcuts
 
-#### Activity (Tab 1)
+#### Status (Tab 1)
+| Key | Action |
+|---|---|
+| `j` / `Down` | Scroll down |
+| `k` / `Up` | Scroll up |
+
+#### Activity (Tab 2)
 | Key | Action |
 |---|---|
 | `j` / `Down` | Scroll down |
@@ -93,7 +108,7 @@ export LLAMA_SWAP_URL=http://your-llama-swap-host:8080
 | `PageDown` / `Ctrl+D` | Next page |
 | `PageUp` / `Ctrl+U` | Previous page |
 
-#### Models (Tab 2)
+#### Models (Tab 3)
 | Key | Action |
 |---|---|
 | `j` / `Down` | Select next model |
@@ -103,22 +118,22 @@ export LLAMA_SWAP_URL=http://your-llama-swap-host:8080
 | `u` | Unload selected model |
 | `x` | Cancel selected in-flight request |
 
-#### Hardware (Tab 3)
+#### Hardware (Tab 4)
 | Key | Action |
 |---|---|
 | `j` / `Down` | Scroll down |
 | `k` / `Up` | Scroll up |
 | `PageDown` / `Ctrl+D` | Page down |
-| `PageUp` / `Ctrl+U` | Page up
+| `PageUp` / `Ctrl+U` | Page up |
 | `r` | Refresh hardware + performance |
 
-#### Logs (Tab 4)
+#### Logs (Tab 5)
 | Key | Action |
 |---|---|
 | `f` | Cycle source filter (All → Proxy → Upstream → All) |
 | `End` | Scroll to bottom of logs |
 
-#### Profiles (Tab 5)
+#### Profiles (Tab 6)
 | Key | Action |
 |---|---|
 | `j` / `Down` | Select next profile |
@@ -133,13 +148,22 @@ llama-swap-tui/
 ├── api/
 │   ├── types.go         # Go type definitions for llama-swap API
 │   └── client.go        # SSE client + REST client
-└── tui/
-    ├── app.go           # Main Bubbletea model, view, key handling
-    ├── activity.go      # Activity tab rendering
-    ├── models.go        # Models tab rendering
-    ├── hardware.go      # Hardware tab rendering
-    ├── logs.go          # Logs tab rendering
-    └── profiles.go      # Profiles tab rendering
+├── tui/
+│   ├── app.go           # Main Bubbletea model, view, key handling
+│   ├── status.go        # Status Dashboard tab rendering
+│   ├── activity.go      # Activity tab rendering
+│   ├── models.go        # Models tab rendering
+│   ├── hardware.go      # Hardware tab rendering
+│   ├── logs.go          # Logs tab rendering
+│   ├── profiles.go      # Profiles tab rendering
+│   ├── style.go         # Lipgloss styling definitions
+│   ├── hscroll_test.go  # Horizontal scroll unit tests
+│   ├── models_layout_test.go  # Models layout unit tests
+│   ├── performance_test.go  # Live integration test
+│   └── tick_test.go     # Tick message unit tests
+├── docs/screenshots/    # Screenshot images for README
+├── .tmp/web/            # Transient web state (ignored)
+└── llama-swap-tui       # Built binary (ignored)
 ```
 
 ### API Layer
@@ -153,9 +177,9 @@ The `api` package provides two communication channels to llama-swap:
 
 Built with [Bubbletea](https://github.com/charmbracelet/bubbletea) using the MVU (Model-View-Update) pattern:
 
-- **Model** — Holds all application state (models, activity, hardware, logs, profiles)
+- **Model** — Holds all application state (models, activity, hardware, logs, profiles, in-flight requests, GPU metrics)
 - **View** — Renders the current tab content with lipgloss styling
-- **Update** — Processes keyboard input, SSE events, and HTTP responses as messages
+- **Update** — Processes keyboard input, SSE events, HTTP responses, and auto-refresh ticks as messages
 
 ## Dependencies
 
@@ -164,6 +188,7 @@ Built with [Bubbletea](https://github.com/charmbracelet/bubbletea) using the MVU
 | `github.com/charmbracelet/bubbletea` | Terminal UI framework (MVU pattern) |
 | `github.com/charmbracelet/bubbles` | TUI components (viewport, help, key bindings) |
 | `github.com/charmbracelet/lipgloss` | Terminal styling and layout |
+| `github.com/charmbracelet/x/ansi` | ANSI-aware text width computation (horizontal scrolling) |
 
 ## License
 
