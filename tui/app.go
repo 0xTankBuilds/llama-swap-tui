@@ -510,7 +510,6 @@ func (m *Model) View() string {
 		m.recalcVP(0)
 		m.vp.SetContent(m.renderDashboard())
 		b.WriteString(m.vp.View())
-		b.WriteString("\n")
 	case tabModels:
 		// Models renders its own two-pane layout (left scrolls in the
 		// viewport, right pane pinned), so it writes directly.
@@ -554,6 +553,18 @@ func (m *Model) startSSE() {
 	m.sse.Start(context.Background())
 
 	go m.sseReader()
+
+	// Raw log stream from /logs/stream (replays buffered logs, then tails).
+	if ch, err := m.client.StreamLogs(context.Background(), ""); err == nil {
+		m.logStream = ch
+		go func() {
+			for line := range ch {
+				if m.program != nil {
+					m.program.Send(LogLineMsg(line))
+				}
+			}
+		}()
+	}
 }
 
 func (m *Model) sseReader() {

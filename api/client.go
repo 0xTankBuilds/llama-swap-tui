@@ -629,14 +629,19 @@ func (c *Client) StreamLogs(ctx context.Context, source string) (<-chan string, 
 					buf = buf[idx+1:]
 					line = strings.TrimRight(line, "\r")
 
-					// SSE data lines start with "data:"
-					if strings.HasPrefix(line, "data:") {
-						data := strings.TrimPrefix(line, "data:")
-						if len(data) > 0 {
-							select {
-							case ch <- data:
-							case <-ctx.Done():
-							}
+					// SSE streams prefix log lines with "data:"; some backend
+					// versions emit plain log lines instead. Accept both.
+					payload := line
+					switch {
+					case strings.HasPrefix(payload, "event:"):
+						continue // SSE event name, not a log line
+					case strings.HasPrefix(payload, "data:"):
+						payload = strings.TrimPrefix(payload, "data:")
+					}
+					if payload != "" {
+						select {
+						case ch <- payload:
+						case <-ctx.Done():
 						}
 					}
 				}
