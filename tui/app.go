@@ -1110,13 +1110,32 @@ func (m *Model) recalcVP(headerH int) {
 // ---------------------------------------------------------------------------
 
 func (m *Model) renderTitle() string {
-	return lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color(colorAccent)).
-		Render(" llama-swap-tui ") +
+	return m.renderConnDot() +
+		lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color(colorAccent)).
+			Render(" llama-swap-tui ") +
 		lipgloss.NewStyle().
 			Foreground(lipgloss.Color(colorTextSecondary)).
 			Render(fmt.Sprintf("[%s]", m.client.BaseURL))
+}
+
+// renderConnDot renders the server connection indicator shown at the top
+// left of the header: a green dot when the llama-swap server is connected,
+// red otherwise (disconnected or still connecting).
+func (m *Model) renderConnDot() string {
+	return lipgloss.NewStyle().
+		Foreground(lipgloss.Color(m.connDotColor())).
+		Render("●")
+}
+
+// connDotColor returns the color token for the header connection
+// indicator: green when connected, red when not.
+func (m *Model) connDotColor() string {
+	if m.conn == connConnected {
+		return colorStatusReady
+	}
+	return colorStatusError
 }
 
 func (m *Model) renderTabs() string {
