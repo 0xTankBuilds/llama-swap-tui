@@ -9,7 +9,7 @@ import (
 )
 
 // The header connection indicator is green when the llama-swap server is
-// connected and red otherwise.
+// connected and amber otherwise (matching the status bar convention).
 func TestConnDotColor(t *testing.T) {
 	client := api.NewClient("http://localhost:8080", http.Header{})
 
@@ -19,8 +19,8 @@ func TestConnDotColor(t *testing.T) {
 		want string
 	}{
 		{"connected is green", connConnected, colorStatusReady},
-		{"disconnected is red", connDisconnected, colorStatusError},
-		{"connecting is red", connConnecting, colorStatusError},
+		{"disconnected is amber", connDisconnected, colorStatusWarning},
+		{"connecting is amber", connConnecting, colorStatusWarning},
 	}
 
 	for _, tt := range tests {
