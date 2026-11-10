@@ -66,15 +66,17 @@ const (
 )
 
 func (s connState) String() string {
+	// Plain label only: renderStatusBar already prepends its own
+	// (colored) dot, so embedding one here rendered "● ● disconnected".
 	switch s {
 	case connDisconnected:
-		return "● disconnected"
+		return "disconnected"
 	case connConnecting:
-		return "● connecting"
+		return "connecting"
 	case connConnected:
-		return "● connected"
+		return "connected"
 	default:
-		return "● ?"
+		return "?"
 	}
 }
 
@@ -88,8 +90,25 @@ type SSEMsg struct {
 	Data string
 }
 
-// SSEErrMsg is a connection error from the SSE stream.
-type SSEErrMsg error
+// SSEErrMsg is a connection error from the SSE stream. It is a struct,
+// not an interface type: a type-switch case for an interface type
+// matches any error value, so the old `type SSEErrMsg error` also caught
+// bare errors returned by the REST poll Cmds (see FetchErrMsg).
+type SSEErrMsg struct {
+	err error
+}
+
+func (e SSEErrMsg) Error() string { return e.err.Error() }
+
+// FetchErrMsg is a REST poll failure (fetchActivity, fetchPerformance,
+// ...). Polls retry every second and the last good data stays on screen,
+// so a poll failure is never a connection error: it must not touch conn
+// and must not set errMsg (which would blank the Activity/Models tabs).
+type FetchErrMsg struct {
+	err error
+}
+
+func (e FetchErrMsg) Error() string { return e.err.Error() }
 
 // ShutdownMsg triggers graceful shutdown.
 type ShutdownMsg struct{}
@@ -371,6 +390,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.errMsg = msg.Error()
 		return m, nil
 
+	case FetchErrMsg:
+		// REST poll failure: transient by design (the 1s tick retries)
+		// and the SSE stream, not the polls, is the source of truth for
+		// connectivity. Keep the last good data; touch neither conn nor
+		// errMsg. fetchVersion and fetchModelActivity already swallow
+		// poll errors the same way.
+		return m, nil
+
 	case SSEMsg:
 		return m.handleSSE(msg)
 
@@ -586,7 +613,7 @@ func (m *Model) sseReader() {
 				return
 			}
 			if m.program != nil {
-				m.program.Send(SSEErrMsg(err))
+				m.program.Send(SSEErrMsg{err: err})
 			}
 		}
 	}
@@ -624,7 +651,7 @@ func (m *Model) fetchActivity() tea.Cmd {
 			Order: "desc",
 		})
 		if err != nil {
-			return fmt.Errorf("fetch activity: %w", err)
+			return FetchErrMsg{err: fmt.Errorf("fetch activity: %w", err)}
 		}
 		ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel2()
@@ -642,7 +669,7 @@ func (m *Model) fetchActivityPage() tea.Cmd {
 			Order: "desc",
 		})
 		if err != nil {
-			return fmt.Errorf("fetch activity page: %w", err)
+			return FetchErrMsg{err: fmt.Errorf("fetch activity page: %w", err)}
 		}
 		return ActivityPageFetchedMsg{page: *result}
 	}
@@ -652,7 +679,7 @@ func (m *Model) fetchHardware() tea.Cmd {
 	return func() tea.Msg {
 		hw, err := m.client.GetHardware(context.Background())
 		if err != nil {
-			return fmt.Errorf("fetch hardware: %w", err)
+			return FetchErrMsg{err: fmt.Errorf("fetch hardware: %w", err)}
 		}
 		return HardwareFetchedMsg{hw: *hw}
 	}
@@ -670,7 +697,7 @@ func (m *Model) fetchPerformance() tea.Cmd {
 		defer cancel()
 		resp, err := m.client.GetPerformance(ctx, cursor)
 		if err != nil {
-			return fmt.Errorf("fetch performance: %w", err)
+			return FetchErrMsg{err: fmt.Errorf("fetch performance: %w", err)}
 		}
 		return PerfFetchedMsg{resp: *resp}
 	}
@@ -708,7 +735,7 @@ func (m *Model) fetchModels() tea.Cmd {
 	return func() tea.Msg {
 		models, err := m.client.GetModels(context.Background())
 		if err != nil {
-			return fmt.Errorf("fetch models: %w", err)
+			return FetchErrMsg{err: fmt.Errorf("fetch models: %w", err)}
 		}
 		return ModelsFetchedMsg{models: models}
 	}
@@ -746,7 +773,7 @@ func (m *Model) fetchProfiles() tea.Cmd {
 	return func() tea.Msg {
 		state, err := m.client.GetProfiles(context.Background())
 		if err != nil {
-			return fmt.Errorf("fetch profiles: %w", err)
+			return FetchErrMsg{err: fmt.Errorf("fetch profiles: %w", err)}
 		}
 		return ProfilesFetchedMsg{state: *state}
 	}
@@ -1107,6 +1134,12 @@ const chromeLines = 7
 func (m *Model) recalcVP(headerH int) {
 	m.vp.Width = m.winW
 	contentH := m.winH - chromeLines - headerH
+	// The red error line below the viewport adds a row while errMsg is
+	// set; shrink the viewport by that row so the whole frame still fits
+	// in winH instead of pushing the title row out of the pane.
+	if m.errMsg != "" {
+		contentH--
+	}
 	if contentH < 1 {
 		contentH = 1
 	}
