@@ -757,6 +757,14 @@ func (m *Model) fetchProfiles() tea.Cmd {
 // ---------------------------------------------------------------------------
 
 func (m *Model) handleSSE(msg SSEMsg) (tea.Model, tea.Cmd) {
+	// Any event arriving on the stream proves the connection is live
+	// again, so drop a stale disconnect error here. errMsg is only ever
+	// set by SSEErrMsg and was never cleared, which left the red
+	// "Error: ..." line at the bottom (and blanked the Activity and
+	// Models tabs, which render errMsg instead of content) after a
+	// reconnect until the next disconnect overwrote it.
+	m.errMsg = ""
+
 	// The server may wrap events in a "message" envelope:
 	//   event:message
 	//   data:{"type":"modelStatus","data":...}
