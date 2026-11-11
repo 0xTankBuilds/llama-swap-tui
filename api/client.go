@@ -506,13 +506,20 @@ func (c *Client) GetHardware(ctx context.Context) (*HardwareSnapshot, error) {
 }
 
 // GetPerformance fetches historical performance data from /api/performance.
+// after is an RFC3339 timestamp echoed by a previous call; the server rejects
+// anything it cannot parse, so it MUST be percent-encoded — a raw "+" in the
+// UTC offset ("...+01:00") decodes to a space and yields HTTP 400.
 func (c *Client) GetPerformance(ctx context.Context, after string) (*PerformanceResponse, error) {
-	url := "/api/performance"
+	q := url.Values{}
 	if after != "" {
-		url += "?after=" + after
+		q.Set("after", after)
+	}
+	path := "/api/performance"
+	if len(q) > 0 {
+		path += "?" + q.Encode()
 	}
 	var result PerformanceResponse
-	if err := c.doJSON(ctx, url, &result); err != nil {
+	if err := c.doJSON(ctx, path, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
