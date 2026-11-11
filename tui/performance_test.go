@@ -50,9 +50,20 @@ func TestPerformanceCursorIsEscaped(t *testing.T) {
 	if seen[0] != "" {
 		t.Errorf("first poll sent after=%q, want empty", seen[0])
 	}
+	want, err := time.Parse(time.RFC3339Nano, stamp)
+	if err != nil {
+		t.Fatalf("bad fixture stamp %q: %v", stamp, err)
+	}
 	for _, a := range seen[1:] {
-		if _, err := time.Parse(time.RFC3339, a); err != nil {
+		got, err := time.Parse(time.RFC3339Nano, a)
+		if err != nil {
 			t.Errorf("cursor %q rejected by server: %v", a, err)
+			continue
+		}
+		// The cursor must be the newest entry's exact instant: a fixed but
+		// valid past timestamp would parse fine yet resend the whole buffer.
+		if !got.Equal(want) {
+			t.Errorf("cursor = %v, want the newest stamp %v", got, want)
 		}
 	}
 	if m.perfCursor == nil {
@@ -94,19 +105,36 @@ func TestPerformanceCursorTracksInstantAcrossOffsets(t *testing.T) {
 	}
 }
 
-// TestPerformanceEmptyResponseHoldsCursor verifies a poll that returns nothing
-// new (server still buffering, or the window already consumed) keeps the cursor
-// where it was instead of resetting it and refetching the whole buffer.
-func TestPerformanceEmptyResponseHoldsCursor(t *testing.T) {
+// TestPerformanceStaleEntryDoesNotRewindCursor guards the merge that seeded its
+// comparison from the zero time: one stale entry — the server's ring buffer can
+// hold an old GPU sample beside fresh system stats — dragged the cursor back to
+// 1970, so every later poll refetched the whole buffer. An unparseable stamp and
+// a poll that returns nothing new (server still buffering, window already
+// consumed) must leave the cursor where it is for the same reason.
+func TestPerformanceStaleEntryDoesNotRewindCursor(t *testing.T) {
 	m := NewModel(api.NewClient("http://unused", http.Header{}), "test")
 	m.applyPerformance(api.PerformanceResponse{
 		SysStats: []api.SysStat{{Timestamp: "2026-11-11T08:00:00+01:00"}},
+		GpuStats: []api.GpuStat{{Timestamp: "1970-01-01T00:00:05Z", ID: 0}},
 	})
-	before := *m.perfCursor
-	m.applyPerformance(api.PerformanceResponse{})
-	if got := *m.perfCursor; !got.Equal(before) {
-		t.Fatalf("cursor = %v after empty response, want %v", got, before)
+	if m.perfCursor == nil {
+		t.Fatal("perfCursor not set")
 	}
+	want := time.Date(2026, 11, 11, 8, 0, 0, 0, time.FixedZone("CET", 3600))
+	check := func(step string) {
+		if got := *m.perfCursor; !got.Equal(want) {
+			t.Fatalf("cursor = %v after %s, want newest sys stamp %v", got, step, want)
+		}
+	}
+	check("stale GPU entry")
+
+	m.applyPerformance(api.PerformanceResponse{
+		SysStats: []api.SysStat{{Timestamp: "not-a-time"}},
+	})
+	check("unparseable stamp")
+
+	m.applyPerformance(api.PerformanceResponse{})
+	check("empty response")
 }
 
 // TestFetchPerformanceLive polls the local llama-swap instance and verifies
