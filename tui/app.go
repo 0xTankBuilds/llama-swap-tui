@@ -231,7 +231,7 @@ type Model struct {
 	// Live performance (SSE perfsys / perfgpu + /api/performance polling)
 	sysStat    *api.SysStat
 	gpuStats   map[int]*api.GpuStat // latest per-GPU stats, keyed by GPU ID
-	perfCursor string               // last-seen performance timestamp (?after=)
+	perfCursor *time.Time           // last-seen perf timestamp, RFC3339 (?after=)
 
 	// Log source filter
 	logFilter logSourceFilter
@@ -659,12 +659,16 @@ func (m *Model) fetchHardware() tea.Cmd {
 }
 
 // fetchPerformance polls /api/performance, which the server appends one entry
-// per device every 5s. It seeds the latest system stats and per-GPU stats so
-// the live sections render without relying on SSE perf events.
+// per device every 5s into a fixed-size ring buffer. It seeds the latest
+// system stats and per-GPU stats so the live sections render without relying
+// on SSE perf events.
 func (m *Model) fetchPerformance() tea.Cmd {
 	// Capture the cursor on the UI goroutine so the Cmd closure reads no
-	// shared state.
-	cursor := m.perfCursor
+	// shared state. RFC3339Nano preserves sub-second ordering within a poll.
+	cursor := ""
+	if m.perfCursor != nil {
+		cursor = m.perfCursor.Format(time.RFC3339Nano)
+	}
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -679,10 +683,10 @@ func (m *Model) fetchPerformance() tea.Cmd {
 // applyPerformance merges new performance entries into the latest-stats
 // state. Runs in Update (UI goroutine).
 func (m *Model) applyPerformance(resp api.PerformanceResponse) {
-	var lastSys, lastGpu string
+	var lastSys, lastGpu time.Time
 	if n := len(resp.SysStats); n > 0 {
 		m.sysStat = &resp.SysStats[n-1]
-		lastSys = resp.SysStats[n-1].Timestamp
+		lastSys = parsePerfTime(resp.SysStats[n-1].Timestamp)
 	}
 	if len(resp.GpuStats) > 0 {
 		if m.gpuStats == nil {
@@ -691,17 +695,36 @@ func (m *Model) applyPerformance(resp api.PerformanceResponse) {
 		for i := range resp.GpuStats {
 			gs := resp.GpuStats[i]
 			m.gpuStats[gs.ID] = &gs
-			if gs.Timestamp > lastGpu {
-				lastGpu = gs.Timestamp
+			if ts := parsePerfTime(gs.Timestamp); ts.After(lastGpu) {
+				lastGpu = ts
 			}
 		}
 	}
-	// Use the older of the two cursors so neither list falls behind.
-	if lastSys != "" && (lastGpu == "" || lastSys <= lastGpu) {
-		m.perfCursor = lastSys
-	} else if lastGpu != "" {
-		m.perfCursor = lastGpu
+	if m.perfCursor == nil {
+		m.perfCursor = &time.Time{}
 	}
+	// Advance to the newest entry seen and never retreat. Stamps carry the
+	// server's UTC offset, so compare instants, never raw strings: a lexical
+	// mix of "+01:00" and "Z" forms orders wrong. Rewinding on a stale or
+	// unparseable entry would make every later poll refetch the whole buffer.
+	next := *m.perfCursor
+	for _, ts := range []time.Time{lastSys, lastGpu} {
+		if ts.After(next) {
+			next = ts
+		}
+	}
+	m.perfCursor = &next
+}
+
+// parsePerfTime turns a server timestamp into an instant, tolerating absent or
+// malformed stamps (zero time, which never advances the cursor).
+func parsePerfTime(s string) time.Time {
+	for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t
+		}
+	}
+	return time.Time{}
 }
 
 func (m *Model) fetchModels() tea.Cmd {
