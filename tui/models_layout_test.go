@@ -240,3 +240,26 @@ func TestActivityHeaderHScrollAligns(t *testing.T) {
 		t.Errorf("shared offset not clamped to content: %d", off)
 	}
 }
+
+// With an error shown, the whole frame must still fit in winH: the red
+// error line below the viewport adds a row, so the viewport shrinks by
+// that row instead of pushing the title row out of the pane (issue #7).
+// Without the fix every tab rendered winH+1 lines while errMsg was set.
+func TestViewFitsWindowHeightWithError(t *testing.T) {
+	client := api.NewClient("http://localhost:8080", http.Header{})
+	for _, size := range [][2]int{{80, 24}, {120, 40}} {
+		for _, tb := range []tab{tabStatus, tabActivity, tabModels, tabHardware, tabLogs, tabProfiles} {
+			m := NewModel(client, "test")
+			m.winW, m.winH = size[0], size[1]
+			m.tab = tb
+			m.conn = connDisconnected
+			m.errMsg = "sse: request failed: connection refused"
+			out := m.View()
+			lines := strings.Split(out, "\n")
+			if len(lines) > m.winH {
+				t.Errorf("%dx%d tab=%v: View() is %d lines, want at most winH=%d",
+					size[0], size[1], tb, len(lines), m.winH)
+			}
+		}
+	}
+}

@@ -65,7 +65,7 @@ func TestReconnectClearsStaleError(t *testing.T) {
 	m := NewModel(client, "test")
 
 	// Disconnect: the error is shown.
-	updated, _ := m.Update(SSEErrMsg(fmt.Errorf("sse: request failed: connection refused")))
+	updated, _ := m.Update(SSEErrMsg{err: fmt.Errorf("sse: request failed: connection refused")})
 	m = updated.(*Model)
 	if m.errMsg == "" {
 		t.Fatal("SSEErrMsg did not set errMsg")
@@ -93,9 +93,81 @@ func TestReconnectClearsStaleError(t *testing.T) {
 	}
 
 	// A later disconnect must still surface its error.
-	updated, _ = m.Update(SSEErrMsg(fmt.Errorf("sse: request failed: connection refused")))
+	updated, _ = m.Update(SSEErrMsg{err: fmt.Errorf("sse: request failed: connection refused")})
 	m = updated.(*Model)
 	if m.errMsg == "" {
 		t.Fatal("second SSEErrMsg did not set errMsg")
+	}
+}
+
+// A REST poll failure must never masquerade as a lost SSE connection.
+// Regression test for issue #7: SSEErrMsg used to be an interface type,
+// so a type-switch case for it matched any error value, including the
+// bare fmt.Errorf values the poll Cmds returned as tea.Msg. A single 404
+// on any REST endpoint then marked the app disconnected and blanked the
+// Activity/Models tabs, even with a healthy SSE stream.
+func TestRestPollErrorDoesNotDisconnect(t *testing.T) {
+	client := api.NewClient("http://localhost:8080", http.Header{})
+	m := NewModel(client, "test")
+	m.conn = connConnected
+
+	// A bare error, exactly what the poll Cmds used to return, must not
+	// disconnect the app or set the error line.
+	updated, _ := m.Update(fmt.Errorf("fetch activity page: GET /api/metrics/activity?limit=10&order=desc: HTTP 404"))
+	m = updated.(*Model)
+	if m.conn != connConnected {
+		t.Fatalf("conn = %v after bare poll error, want connected", m.conn)
+	}
+	if m.errMsg != "" {
+		t.Fatalf("errMsg = %q after bare poll error, want empty", m.errMsg)
+	}
+
+	// The same failure wrapped in the poll failures' own message type.
+	updated, _ = m.Update(FetchErrMsg{err: fmt.Errorf("fetch performance: GET /api/performance: HTTP 404")})
+	m = updated.(*Model)
+	if m.conn != connConnected {
+		t.Fatalf("conn = %v after FetchErrMsg, want connected", m.conn)
+	}
+	if m.errMsg != "" {
+		t.Fatalf("errMsg = %q after FetchErrMsg, want empty", m.errMsg)
+	}
+	if strings.Contains(m.View(), "Error: ") {
+		t.Fatal("View() shows an error line after a poll failure")
+	}
+
+	// A genuine SSE stream error must still disconnect and show.
+	updated, _ = m.Update(SSEErrMsg{err: fmt.Errorf("sse: request failed: connection refused")})
+	m = updated.(*Model)
+	if m.conn != connDisconnected {
+		t.Fatalf("conn = %v after SSEErrMsg, want disconnected", m.conn)
+	}
+	if m.errMsg == "" {
+		t.Fatal("SSEErrMsg did not set errMsg")
+	}
+}
+
+// The status bar must show a single connection dot. connState.String()
+// used to embed a dot of its own while renderStatusBar prepended another,
+// rendering "● ● disconnected".
+func TestStatusBarSingleDot(t *testing.T) {
+	client := api.NewClient("http://localhost:8080", http.Header{})
+	m := NewModel(client, "test")
+
+	for _, tc := range []struct {
+		conn connState
+		want string
+	}{
+		{connDisconnected, "disconnected"},
+		{connConnecting, "connecting"},
+		{connConnected, "connected"},
+	} {
+		m.conn = tc.conn
+		bar := m.renderStatusBar()
+		if n := strings.Count(bar, "●"); n != 1 {
+			t.Fatalf("conn=%v: status bar has %d dots, want 1: %q", tc.conn, n, bar)
+		}
+		if !strings.Contains(bar, tc.want) {
+			t.Fatalf("conn=%v: status bar missing %q: %q", tc.conn, tc.want, bar)
+		}
 	}
 }
