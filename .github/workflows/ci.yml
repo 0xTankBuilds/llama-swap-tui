@@ -1,0 +1,26 @@
+# CI: vet, build, and test every pull request (and every push to master,
+# so a direct push or merge is checked the same way a PR is).
+name: CI
+
+"on":
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Vet
+        run: go vet ./...
+      - name: Build
+        run: go build ./...
+      - name: Test
+        # -v so the log lists every test by name (without it, `go test`
+        # only prints one summary line per package).
+        run: go test -v ./...
