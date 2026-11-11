@@ -1,6 +1,6 @@
 # llama-swap-tui
 
-A terminal UI (TUI) for [llama-swap](https://github.com/binfelipe/llama-swap) — monitor model swaps, request activity, hardware stats, in-flight requests, GPU metrics, and more from your terminal.
+A terminal UI (TUI) for [llama-swap](https://github.com/mostlygeek/llama-swap) — monitor model swaps, request activity, hardware stats, in-flight requests, GPU metrics, and more from your terminal.
 
 ![llama-swap-tui](https://img.shields.io/badge/go-1.24+-blue)
 ![llama-swap-tui](https://img.shields.io/badge/license-MIT-green)
@@ -50,7 +50,7 @@ Live streaming logs with source filtering and auto-scroll.
 ### Prerequisites
 
 - [Go 1.24.2](https://go.dev/dl/) or later
-- A running [llama-swap](https://github.com/binfelipe/llama-swap) instance
+- A running [llama-swap](https://github.com/mostlygeek/llama-swap) instance
 
 ### Build from source
 
@@ -158,8 +158,9 @@ llama-swap-tui/
 │   ├── profiles.go      # Profiles tab rendering
 │   ├── style.go         # Lipgloss styling definitions
 │   ├── hscroll_test.go  # Horizontal scroll unit tests
+│   ├── header_conn_test.go  # Connection dot / error routing tests
 │   ├── models_layout_test.go  # Models layout unit tests
-│   ├── performance_test.go  # Live integration test
+│   ├── performance_test.go  # Perf cursor unit tests + live integration test
 │   └── tick_test.go     # Tick message unit tests
 ├── docs/screenshots/    # Screenshot images for README
 ├── .tmp/web/            # Transient web state (ignored)
