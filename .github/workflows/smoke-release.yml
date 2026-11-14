@@ -1,0 +1,34 @@
+name: smoke-release
+
+# After a release is published, download the Linux amd64 asset and boot it
+# against the mock server, asserting the header shows the release tag.
+# This validates the packaged artifact, not just a local build.
+"on":
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install tmux
+        # The TUI needs a real TTY; install explicitly rather than relying
+        # on the runner image shipping tmux.
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq tmux
+      - name: Download Linux release asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p /tmp/smoke-asset
+          gh release download "${{ github.event.release.tag_name }}" \
+            --pattern "*_linux_amd64.tar.gz" --dir /tmp/smoke-asset
+          tar xzf /tmp/smoke-asset/*_linux_amd64.tar.gz -C /tmp/smoke-asset
+      - name: Smoke test release binary
+        run: ./scripts/smoke-test.sh --binary /tmp/smoke-asset/llama-swap-tui --expect-version "${{ github.event.release.tag_name }}"
