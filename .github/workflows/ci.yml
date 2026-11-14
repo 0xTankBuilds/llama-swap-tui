@@ -40,4 +40,4 @@ jobs:
         # on the runner image shipping tmux.
         run: sudo apt-get update -qq && sudo apt-get install -y -qq tmux
       - name: Smoke test
-        run: ./scripts/smoke-test.sh
+        run: bash scripts/smoke-test.sh

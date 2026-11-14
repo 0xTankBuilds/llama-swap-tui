@@ -31,4 +31,4 @@ jobs:
             --pattern "*_linux_amd64.tar.gz" --dir /tmp/smoke-asset
           tar xzf /tmp/smoke-asset/*_linux_amd64.tar.gz -C /tmp/smoke-asset
       - name: Smoke test release binary
-        run: ./scripts/smoke-test.sh --binary /tmp/smoke-asset/llama-swap-tui --expect-version "${{ github.event.release.tag_name }}"
+        run: bash scripts/smoke-test.sh --binary /tmp/smoke-asset/llama-swap-tui --expect-version "${{ github.event.release.tag_name }}"
