@@ -45,7 +45,7 @@ llama-swap-tui/
 | Vet     | `go vet ./...` |
 | Run     | `./llama-swap-tui` or `LLAMA_SWAP_URL=http://host:8080 ./llama-swap-tui` |
 
-CI runs on PRs to master via `.github/workflows/ci.yml` (`go vet`, `go build`, `go test -v`). Tagged releases (`v*.*.*`) publish binaries via `.github/workflows/release.yml` (GoReleaser).
+CI runs on PRs to master via `.github/workflows/ci.yml` (`go vet`, `go build`, `go test -v`). Tagged releases (`v*.*.*`) publish binaries via `.github/workflows/release.yml` (GoReleaser). Weekly releases are tagged automatically by `.github/workflows/auto-tag.yml` (see AUTO-TAGGING below).
 
 ## CODING STANDARDS
 *   **Language**: Go 1.24.2. Standard library imports first, then third-party, then project-local (`llama-swap-tui/api`, `llama-swap-tui/tui`).
@@ -64,6 +64,11 @@ CI runs on PRs to master via `.github/workflows/ci.yml` (`go vet`, `go build`, `
 *   `tui/models_layout_test.go` — Models tab clipping/layout, fetch cmd race safety, tab line-count budgets, activity header alignment, window-height fit (incl. error state).
 *   `tui/tick_test.go` — Auto-refresh tick delivers `time.Time` messages and reschedules itself.
 *   `tui/header_conn_test.go` — Header connection dot color/rendering, stale error cleared on reconnect, and REST poll failures not marking the app disconnected.
+
+## AUTO-TAGGING
+`scripts/auto-tag.sh` tags the next release from merged PRs; `.github/workflows/auto-tag.yml` runs it every Sunday at 21:00 HKT, and it can also be run manually from the Actions tab (with a dry-run option). It reads the squash-merged PR titles since the last tag (`git log` subjects ending in ` (#N)`), bumps SemVer from them (`feat` -> minor, anything else -> patch, `type!` or `BREAKING CHANGE` -> major), and pushes an annotated tag, which triggers the release workflow. Weeks with no merged PRs tag nothing; if the computed tag already exists it exits quietly. With no tags at all the first tag is `v1.0.0`. Run it locally with `bash scripts/auto-tag.sh --dry-run`.
+
+Setup: the workflow needs a repository secret named `RELEASE_PAT` holding a fine-grained PAT with Contents write. The tag must be pushed with that token, not the built-in `GITHUB_TOKEN`: pushes made with `GITHUB_TOKEN` do not trigger other workflows, so the release workflow would never fire. The workflow fails fast with a clear error when the secret is missing.
 
 ## SCREENSHOTS
 Tab screenshots in `docs/screenshots/` are captured from a **live** TUI session: tmux → ANSI capture → Pillow render via `scripts/mkshot.py`. The TUI requires a real TTY (`/dev/tty`), so it cannot run headless in a plain subprocess.
@@ -97,7 +102,7 @@ Note: the Logs tab tails `/logs/stream` live — if it's empty ("No logs yet"), 
 *   **Style**: `tui/style.go`
 
 ## NOTES
-*   Version is injected at build time: `var version = "dev"` in `main.go`, overridden by GoReleaser via `-X main.version={{.Version}}` on tagged releases (see `.goreleaser.yaml` and `.github/workflows/release.yml`).
+*   Version is injected at build time: `var version = "dev"` in `main.go`, overridden by GoReleaser via `-X main.version=v{{.Version}}` on tagged releases (see `.goreleaser.yaml` and `.github/workflows/release.yml`).
 *   **Status Dashboard** (PR #3): New tab with 4 cards — In-flight requests (with elapsed bars), Loaded Models (state breakdown), GPU (VRAM/util/power bars), Recent Activity (last 10 requests, auto-refreshing every 1s).
 *   The binary `llama-swap-tui` is built locally from source; it is gitignored and **not** tracked (earlier revisions of this file wrongly claimed it was committed).
 *   Known gap: `/api/performance` answers HTTP 503 `{"enabled": false}` when `performance.disabled: true`. `PerformanceResponse` has no `Enabled` field and `doJSON` rejects non-200, so monitoring-disabled servers show empty Hardware/GPU sections with no explanation — and silently, since `FetchErrMsg` is discarded.
