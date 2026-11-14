@@ -19,7 +19,7 @@ builds:
       - -trimpath
     ldflags:
       - -s -w
-      - -X main.version={{ .Version }}
+      - -X main.version=v{{ .Version }}
 
 archives:
   - formats: [tar.gz]
@@ -37,6 +37,6 @@ changelog:
   sort: asc
   filters:
     exclude:
-      - "^docs:"
-      - "^chore:"
-      - "^test:"
+      - "^docs(\\(|:)"
+      - "^chore(\\(|:)"
+      - "^test(\\(|:)"
