@@ -52,6 +52,10 @@ Live streaming logs with source filtering and auto-scroll.
 - [Go 1.24.2](https://go.dev/dl/) or later
 - A running [llama-swap](https://github.com/mostlygeek/llama-swap) instance
 
+### Download a release
+
+Tagged releases ship prebuilt binaries for Linux, macOS and Windows (amd64 and arm64) on the [Releases page](https://github.com/0xTankBuilds/llama-swap-tui/releases). Download the archive for your platform, unpack it, and run `./llama-swap-tui`.
+
 ### Build from source
 
 ```bash
