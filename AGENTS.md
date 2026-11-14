@@ -45,7 +45,7 @@ llama-swap-tui/
 | Vet     | `go vet ./...` |
 | Run     | `./llama-swap-tui` or `LLAMA_SWAP_URL=http://host:8080 ./llama-swap-tui` |
 
-No CI is configured — `go vet ./...` and `go test ./...` are the only gate before a merge.
+CI runs on PRs to master via `.github/workflows/ci.yml` (`go vet`, `go build`, `go test -v`). Tagged releases (`v*.*.*`) publish binaries via `.github/workflows/release.yml` (GoReleaser).
 
 ## CODING STANDARDS
 *   **Language**: Go 1.24.2. Standard library imports first, then third-party, then project-local (`llama-swap-tui/api`, `llama-swap-tui/tui`).
@@ -97,7 +97,7 @@ Note: the Logs tab tails `/logs/stream` live — if it's empty ("No logs yet"), 
 *   **Style**: `tui/style.go`
 
 ## NOTES
-*   Version is embedded at build time: `const version = "v1.3.0-auto-refresh"` in `main.go`.
+*   Version is injected at build time: `var version = "dev"` in `main.go`, overridden by GoReleaser via `-X main.version={{.Version}}` on tagged releases (see `.goreleaser.yaml` and `.github/workflows/release.yml`).
 *   **Status Dashboard** (PR #3): New tab with 4 cards — In-flight requests (with elapsed bars), Loaded Models (state breakdown), GPU (VRAM/util/power bars), Recent Activity (last 10 requests, auto-refreshing every 1s).
 *   The binary `llama-swap-tui` is built locally from source; it is gitignored and **not** tracked (earlier revisions of this file wrongly claimed it was committed).
 *   Known gap: `/api/performance` answers HTTP 503 `{"enabled": false}` when `performance.disabled: true`. `PerformanceResponse` has no `Enabled` field and `doJSON` rejects non-200, so monitoring-disabled servers show empty Hardware/GPU sections with no explanation — and silently, since `FetchErrMsg` is discarded.

@@ -14,10 +14,13 @@ import (
 )
 
 const (
-	version     = "v1.3.0-auto-refresh"
 	defaultHost = "http://localhost:8080"
 	envKey      = "LLAMA_SWAP_URL"
 )
+
+// version is set at build time via -ldflags "-X main.version=...".
+// Local builds without ldflags report "dev".
+var version = "dev"
 
 func main() {
 	host := defaultHost
