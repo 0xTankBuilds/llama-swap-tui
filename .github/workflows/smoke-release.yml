@@ -42,6 +42,8 @@ jobs:
   # stable release. An edit does not re-trigger this workflow, it only
   # listens for published events, so there is no loop. The issue step runs
   # even if the edit fails, so a failure to roll back is still recorded.
+  # A re-run skips creating a second tracking issue when one already
+  # exists for the release.
   rollback:
     name: Roll back release on smoke failure
     needs: smoke
@@ -63,12 +65,24 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          title="Smoke test failed for ${{ github.event.release.tag_name }} (rolled back to pre-release)"
+          if gh issue list --repo "${{ github.repository }}" --state open --limit 100 --json title --jq '.[].title' | grep -qxF "$title"; then
+            echo "A tracking issue already exists for this release, skipping."
+            exit 0
+          fi
+          if [ "${{ steps.mark.outcome }}" = "success" ]; then
+            rollback_note="The release has been marked as a pre-release so it is no longer the latest release."
+          else
+            rollback_note="The rollback did NOT take effect (mark step result: ${{ steps.mark.outcome }}). The release is still the latest release: mark it as a pre-release manually, then investigate the smoke failure."
+          fi
           gh issue create --repo "${{ github.repository }}" \
-            --title "Smoke test failed for ${{ github.event.release.tag_name }} (rolled back to pre-release)" \
+            --title "$title" \
             --body "The post-release smoke test failed for release ${{ github.event.release.tag_name }}.
 
           Release: ${{ github.event.release.html_url }}
           Smoke run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           Rollback (mark as pre-release): ${{ steps.mark.outcome }}
 
-          The release has been marked as a pre-release so it is no longer the latest release. Investigate the smoke failure, fix it, and cut a new release; do not re-publish this tag as a stable release."
+          ${rollback_note}
+
+          Investigate the smoke failure, fix it, and cut a new release; do not re-publish this tag as a stable release."
