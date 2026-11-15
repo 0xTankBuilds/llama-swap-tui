@@ -48,7 +48,7 @@ func sseHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
 		return
 	}
-	fmt.Fprintf(w, "event: modelStatus\ndata: %s\n\n", modelStatusEvent)
+	_, _ = fmt.Fprintf(w, "event: modelStatus\ndata: %s\n\n", modelStatusEvent)
 	flusher.Flush()
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
@@ -57,7 +57,7 @@ func sseHandler(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case <-ticker.C:
-			fmt.Fprint(w, ": ping\n\n")
+			_, _ = fmt.Fprint(w, ": ping\n\n")
 			flusher.Flush()
 		}
 	}
@@ -77,7 +77,7 @@ func logStreamHandler(w http.ResponseWriter, r *http.Request) {
 		"data: [mock] llama-swap smoke log line 1\n\n",
 		"data: [mock] llama-swap smoke log line 2\n\n",
 	} {
-		fmt.Fprint(w, line)
+		_, _ = fmt.Fprint(w, line)
 	}
 	flusher.Flush()
 	<-r.Context().Done()

@@ -44,9 +44,10 @@ llama-swap-tui/
 | Smoke test | `./scripts/smoke-test.sh` (builds the binary and the mock itself) |
 | Build   | `go build -o llama-swap-tui .` |
 | Vet     | `go vet ./...` |
+| Lint    | `golangci-lint run ./...` (config: `.golangci.yml`, pinned to v2.15.0 in CI) |
 | Run     | `./llama-swap-tui` or `LLAMA_SWAP_URL=http://host:8080 ./llama-swap-tui` |
 
-CI runs on PRs to master via `.github/workflows/ci.yml` (format check, `go vet`, `go build`, `go test -v`, plus a smoke test that boots the binary against a mock server). Tagged releases (`v*.*.*`) publish binaries via `.github/workflows/release.yml` (GoReleaser). Weekly releases are tagged automatically by `.github/workflows/auto-tag.yml` (see AUTO-TAGGING below).
+CI runs on PRs to master via `.github/workflows/ci.yml` (format check, `go vet`, `go build`, `go test -v`, a smoke test that boots the binary against a mock server, and a golangci-lint job — see LINT below). Tagged releases (`v*.*.*`) publish binaries via `.github/workflows/release.yml` (GoReleaser). Weekly releases are tagged automatically by `.github/workflows/auto-tag.yml` (see AUTO-TAGGING below).
 
 ## CODING STANDARDS
 *   **Language**: Go 1.24.2. Standard library imports first, then third-party, then project-local (`llama-swap-tui/api`, `llama-swap-tui/tui`).
@@ -70,6 +71,9 @@ CI runs on PRs to master via `.github/workflows/ci.yml` (format check, `go vet`,
 `scripts/smoke-test.sh` boots the real binary against `cmd/mock-llama-swap` (a fake llama-swap serving the boot-time endpoints with canned data: version, models, activity, stats, hardware, profiles, performance, tailcat, the SSE event stream, and the log stream) and asserts, over tmux pane captures: the title row shows the app and host, the status bar shows connected with the mock API version and the binary version, no `Error:` line appears, tab keys 1-6 all render (Models lists the mock model, Logs shows the mock log line), and `q` quits cleanly. Flags: `--binary`/`--mock` to skip building, `--port`, `--expect-version` (defaults to `dev`; the post-release workflow passes the release tag).
 
 Runs in CI on every PR (the `smoke` job in `.github/workflows/ci.yml`) and after every published release (`.github/workflows/smoke-release.yml`, which downloads the Linux amd64 asset and re-runs the same script against it). The TUI needs a real TTY, so the script runs it inside tmux at 128x32; install tmux explicitly in CI rather than assuming the runner image ships it.
+
+## LINT
+`golangci-lint run ./...` (config `.golangci.yml`, default linter set listed explicitly: errcheck, govet, ineffassign, staticcheck, unused). The CI `lint` job runs the same config via `golangci/golangci-lint-action@v9` pinned to v2.15.0. One deliberate exclusion: staticcheck QF1012 is off, because the codebase builds rendered output with `b.WriteString(fmt.Sprintf(...))` in ~30 places and rewriting them all buys nothing. Note golangci-lint caps identical-text issues at 3 per run (`max-same-issues`), so a first run can hide more of the same: fix what it reports, then re-run until it is clean.
 
 ## AUTO-TAGGING
 `scripts/auto-tag.sh` tags the next release from merged PRs; `.github/workflows/auto-tag.yml` runs it every Sunday at 21:00 HKT, and it can also be run manually from the Actions tab (with a dry-run option). It reads the squash-merged PR titles since the last tag (`git log` subjects ending in ` (#N)`), bumps SemVer from them (`feat` -> minor, anything else -> patch, `type!` or `BREAKING CHANGE` -> major), and pushes an annotated tag, which triggers the release workflow. Weeks with no merged PRs tag nothing; if the computed tag already exists it exits quietly. With no tags at all the first tag is `v1.0.0`. Run it locally with `bash scripts/auto-tag.sh --dry-run`.

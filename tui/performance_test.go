@@ -27,7 +27,7 @@ func TestPerformanceCursorIsEscaped(t *testing.T) {
 				return
 			}
 		}
-		fmt.Fprintf(w, `{"enabled":true,"sys_stats":[{"timestamp":%q,"mem_total_mb":100}],`+
+		_, _ = fmt.Fprintf(w, `{"enabled":true,"sys_stats":[{"timestamp":%q,"mem_total_mb":100}],`+
 			`"gpu_stats":[{"timestamp":%q,"id":0,"name":"T"}]}`, stamp, stamp)
 	})
 	srv := httptest.NewServer(mux)
@@ -175,6 +175,5 @@ func TestFetchPerformanceLive(t *testing.T) {
 			t.Fatalf("second fetchPerformance: %v", err)
 		}
 	}
-	next, _ = m.Update(msg)
-	m = next.(*Model)
+	_, _ = m.Update(msg)
 }

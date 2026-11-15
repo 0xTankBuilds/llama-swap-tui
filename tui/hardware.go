@@ -61,10 +61,10 @@ func (m *Model) renderSystemInfo() string {
 		kind = *m.hardware.Environment.Name
 	}
 
-	b.WriteString(fmt.Sprintf("  Arch: %-20s OS: %s\n", arch, osInfo))
-	b.WriteString(fmt.Sprintf("  Env: %-24s\n", kind))
+	fmt.Fprintf(&b, "  Arch: %-20s OS: %s\n", arch, osInfo)
+	fmt.Fprintf(&b, "  Env: %-24s\n", kind)
 	if m.hardware.Capture.Method != "" {
-		b.WriteString(fmt.Sprintf("  Detected via: %s\n", m.hardware.Capture.Method))
+		fmt.Fprintf(&b, "  Detected via: %s\n", m.hardware.Capture.Method)
 	}
 
 	return b.String()

@@ -11,17 +11,6 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// Profiles view state
-// ---------------------------------------------------------------------------
-
-type profilesView struct {
-	selected   int
-	loading    bool
-	statusMsg  string
-	statusTime time.Time
-}
-
-// ---------------------------------------------------------------------------
 // Render
 // ---------------------------------------------------------------------------
 
@@ -129,7 +118,7 @@ func (m *Model) profileScrollDown() {
 		return
 	}
 	m.selected++
-	m.vp.LineDown(1)
+	m.vp.ScrollDown(1)
 }
 
 func (m *Model) profileScrollUp() {
@@ -137,7 +126,7 @@ func (m *Model) profileScrollUp() {
 		return
 	}
 	m.selected--
-	m.vp.LineUp(1)
+	m.vp.ScrollUp(1)
 }
 
 func (m *Model) switchSelectedProfile() tea.Cmd {

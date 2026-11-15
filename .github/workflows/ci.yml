@@ -52,3 +52,17 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y -qq tmux
       - name: Smoke test
         run: bash scripts/smoke-test.sh
+
+  lint:
+    # golangci-lint (default set, see .golangci.yml). Separate job so it
+    # runs in parallel with the test and smoke jobs.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.15.0

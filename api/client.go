@@ -109,7 +109,7 @@ func (c *SSEClient) readLoop(ctx context.Context) {
 		}
 
 		if resp.StatusCode != http.StatusOK {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			c.errCh <- fmt.Errorf("sse: unexpected status %d", resp.StatusCode)
 			time.Sleep(1 * time.Second)
 			continue
@@ -155,11 +155,8 @@ func (c *SSEClient) readLoop(ctx context.Context) {
 					eventType = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
 				} else if strings.HasPrefix(line, "data:") {
 					dataBuf.WriteString(strings.TrimPrefix(line, "data:") + "\n")
-				} else if strings.HasPrefix(line, "id:") {
-					// Event ID — skip for now.
-				} else {
-					// Unknown field, skip.
 				}
+				// Other fields (event id:, unknown fields) are ignored.
 			}
 
 			if readErr != nil {
@@ -168,17 +165,17 @@ func (c *SSEClient) readLoop(ctx context.Context) {
 				}
 				select {
 				case <-ctx.Done():
-					resp.Body.Close()
+					_ = resp.Body.Close()
 					return
 				case <-c.done:
-					resp.Body.Close()
+					_ = resp.Body.Close()
 					return
 				default:
 				}
 			}
 		}
 
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		select {
 		case <-ctx.Done():
@@ -230,7 +227,7 @@ func (c *Client) doJSON(ctx context.Context, path string, v interface{}) error {
 	if err != nil {
 		return fmt.Errorf("GET %s: %w", path, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("GET %s: HTTP %d", path, resp.StatusCode)
@@ -271,7 +268,7 @@ func (c *Client) doJSONPost(ctx context.Context, path string, body interface{}, 
 	if err != nil {
 		return fmt.Errorf("POST %s: %w", path, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 		bodyBytes, _ := io.ReadAll(resp.Body)
@@ -313,7 +310,7 @@ func (c *Client) doJSONPut(ctx context.Context, path string, body interface{}, v
 	if err != nil {
 		return fmt.Errorf("PUT %s: %w", path, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
@@ -566,7 +563,7 @@ func (c *Client) LoadModel(ctx context.Context, model string) error {
 	if err != nil {
 		return fmt.Errorf("load model %s: %w", model, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("load model %s: HTTP %d", model, resp.StatusCode)
@@ -659,13 +656,13 @@ func (c *Client) StreamLogs(ctx context.Context, source string) (<-chan string, 
 					}
 					select {
 					case <-ctx.Done():
-						resp.Body.Close()
+						_ = resp.Body.Close()
 						return
 					default:
 					}
 				}
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			time.Sleep(1 * time.Second)
 		}
 	}()
