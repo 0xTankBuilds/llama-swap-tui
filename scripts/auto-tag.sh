@@ -29,6 +29,8 @@ last_tag() {
 # (one per line). Squash merges land as "<title> (#N)"; anything without
 # that suffix is a direct push, not a merged PR, and is ignored.
 # With an empty tag, all of history is in range.
+# Title-only: --format=%s reads the squash subject, so a BREAKING CHANGE
+# note that lives in the commit body is not seen.
 pr_subjects() {
 	local range="HEAD"
 	if [[ -n "$1" ]]; then
