@@ -12,31 +12,6 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// Activity view state
-// ---------------------------------------------------------------------------
-
-type sortColumn int
-
-const (
-	sortID sortColumn = iota
-	sortTime
-	sortModel
-	sortStatus
-	sortPath
-)
-
-type activityView struct {
-	page       api.ActivityPage
-	stats      *api.ActivityStats
-	sortCol    sortColumn
-	sortOrder  string // "asc" or "desc"
-	filter     string // model filter
-	pageNum    int
-	totalPages int
-	selected   int // selected row index
-}
-
-// ---------------------------------------------------------------------------
 // Render
 // ---------------------------------------------------------------------------
 
@@ -105,13 +80,13 @@ func (m *Model) renderActivityBody() string {
 				}
 			}
 			// Render full-width (no truncation) - scrolling handles visibility
-			b.WriteString(fmt.Sprintf("  %-13s %-15s %-18s %-13s %s\n",
+			fmt.Fprintf(&b, "  %-13s %-15s %-18s %-13s %s\n",
 				req.ID,
 				req.Model,
 				agent,
 				req.Method,
 				req.ReqPath,
-			))
+			)
 		}
 		b.WriteString("\n")
 	}
@@ -330,22 +305,6 @@ func (m *Model) renderActivityRow(entry api.ActivityLogEntry, idx int) string {
 // ---------------------------------------------------------------------------
 // Actions
 // ---------------------------------------------------------------------------
-
-func (m *Model) activityScrollDown() {
-	if len(m.activityPage.Data) == 0 || m.selected < 0 || m.selected >= len(m.activityPage.Data)-1 {
-		return
-	}
-	m.selected++
-	m.vp.LineDown(1)
-}
-
-func (m *Model) activityScrollUp() {
-	if len(m.activityPage.Data) == 0 || m.selected < 1 {
-		return
-	}
-	m.selected--
-	m.vp.LineUp(1)
-}
 
 func (m *Model) activityNextPage() tea.Cmd {
 	if m.pageNum < m.totalPages {

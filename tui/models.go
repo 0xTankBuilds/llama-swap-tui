@@ -13,19 +13,6 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// Models view state
-// ---------------------------------------------------------------------------
-
-type modelsView struct {
-	selected   int
-	inflight   []api.InflightRequestEntry
-	filter     string
-	loading    map[string]bool // model name -> loading
-	statusMsg  string
-	statusTime time.Time
-}
-
-// ---------------------------------------------------------------------------
 // Render
 // ---------------------------------------------------------------------------
 
@@ -289,7 +276,7 @@ func (m *Model) renderModelDetail(width, maxH int) string {
 	// page while we are rendering, so iterate the captured slice instead.
 	data := m.modelActivity.Data
 	var rows []string
-	if data == nil || len(data) == 0 {
+	if len(data) == 0 {
 		rows = []string{"  No activity for this model."}
 	} else {
 		for i := len(data) - 1; i >= 0; i-- {
@@ -328,41 +315,6 @@ func (m *Model) renderModelDetail(width, maxH int) string {
 	}
 
 	return strings.TrimSuffix(b.String(), "\n")
-}
-
-func (m *Model) renderModelRow(model api.Model, idx int) string {
-	stateColor := colorStatusStopped
-	switch model.State {
-	case api.ModelReady:
-		stateColor = colorStatusReady
-	case api.ModelStarting:
-		stateColor = colorStatusStarting
-	case api.ModelStopping:
-		stateColor = colorStatusStopping
-	case api.ModelStopped:
-		stateColor = colorStatusStopped
-	case api.ModelShutdown:
-		stateColor = colorStatusError
-	}
-
-	stateStr := string(model.State)
-	if m.loading[modelName(model)] {
-		stateStr = "loading..."
-		stateColor = colorLoading
-	}
-
-	nameW := 28
-	stateW := 10
-	descW := m.vp.Width - nameW - stateW - 12
-	if descW < 20 {
-		descW = 20
-	}
-
-	return fmt.Sprintf("  %-*s %-*s %s",
-		nameW, truncate(modelName(model), nameW-1),
-		stateW, lipgloss.NewStyle().Foreground(lipgloss.Color(stateColor)).Render(stateStr),
-		truncate(model.Description, descW),
-	)
 }
 
 func (m *Model) renderModelRowCompact(model api.Model, idx int, nameW, stateW, descW int) string {
@@ -453,7 +405,7 @@ func (m *Model) modelScrollDown() tea.Cmd {
 	}
 	m.selected++
 	m.selectedModel = modelName(m.models[m.selected])
-	m.vp.LineDown(1)
+	m.vp.ScrollDown(1)
 	return m.fetchModelActivity(m.selectedModel)
 }
 
@@ -463,7 +415,7 @@ func (m *Model) modelScrollUp() tea.Cmd {
 	}
 	m.selected--
 	m.selectedModel = modelName(m.models[m.selected])
-	m.vp.LineUp(1)
+	m.vp.ScrollUp(1)
 	return m.fetchModelActivity(m.selectedModel)
 }
 

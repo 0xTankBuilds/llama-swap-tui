@@ -394,7 +394,7 @@ func (m *Model) renderActivityCard() string {
 
 	b.WriteString(m.cardHeader("Recent Activity (last 10)", colorAccent))
 
-	if m.activityPage.Data == nil || len(m.activityPage.Data) == 0 {
+	if len(m.activityPage.Data) == 0 {
 		b.WriteString(lipgloss.NewStyle().
 			Foreground(lipgloss.Color(colorTextTertiary)).
 			Render("  No recent activity.") + "\n")

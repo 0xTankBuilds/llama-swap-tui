@@ -11,7 +11,6 @@ import (
 	"llama-swap-tui/api"
 
 	"github.com/charmbracelet/bubbles/help"
-	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/bubbletea"
@@ -116,6 +115,8 @@ type ShutdownMsg struct{}
 // Fetched messages carry API data into the update loop. Cmd goroutines only
 // perform the HTTP fetch and return the data here; they never write Model
 // state directly, so the update loop and View() never race.
+
+// VersionFetchedMsg carries the fetched server version.
 type VersionFetchedMsg struct {
 	info api.VersionInfo
 }
@@ -168,53 +169,6 @@ type ProfileSwitchMsg struct {
 
 // LogLineMsg is a line from the log stream.
 type LogLineMsg string
-
-// ---------------------------------------------------------------------------
-// Key bindings
-// ---------------------------------------------------------------------------
-
-type keyMap struct {
-	Quit            key.Binding
-	Refresh         key.Binding
-	Help            key.Binding
-	NextTab         key.Binding
-	PrevTab         key.Binding
-	LoadModel       key.Binding
-	LoadModelByName key.Binding
-	UnloadModel     key.Binding
-	CancelReq       key.Binding
-	SwitchProfile   key.Binding
-	ScrollDown      key.Binding
-	ScrollUp        key.Binding
-}
-
-func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Quit, k.Refresh, k.Help}
-}
-
-func (k keyMap) FullHelp() []key.Binding {
-	return []key.Binding{
-		k.NextTab, k.PrevTab,
-		k.LoadModel, k.LoadModelByName, k.UnloadModel, k.CancelReq, k.SwitchProfile,
-		k.ScrollDown, k.ScrollUp,
-		k.Quit, k.Refresh, k.Help,
-	}
-}
-
-var keys = keyMap{
-	Quit:            key.NewBinding(key.WithKeys("q", "ctrl+c")),
-	Refresh:         key.NewBinding(key.WithKeys("r")),
-	Help:            key.NewBinding(key.WithKeys("?")),
-	NextTab:         key.NewBinding(key.WithKeys("tab", "shift+tab", "n", "1", "2", "3", "4", "5")),
-	PrevTab:         key.NewBinding(key.WithKeys("h", "p")),
-	LoadModel:       key.NewBinding(key.WithKeys("l")),
-	LoadModelByName: key.NewBinding(key.WithKeys("L")),
-	UnloadModel:     key.NewBinding(key.WithKeys("u")),
-	CancelReq:       key.NewBinding(key.WithKeys("x")),
-	SwitchProfile:   key.NewBinding(key.WithKeys("enter")),
-	ScrollDown:      key.NewBinding(key.WithKeys("j", "down", "pgdown")),
-	ScrollUp:        key.NewBinding(key.WithKeys("k", "up", "pgup")),
-}
 
 // ---------------------------------------------------------------------------
 // Model
@@ -1071,7 +1025,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case tabActivity:
 			m.modelActivityScrollDown()
 		case tabHardware:
-			m.vp.LineDown(1)
+			m.vp.ScrollDown(1)
 		case tabLogs:
 			m.logScrollDown()
 		case tabModels:
@@ -1084,7 +1038,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case tabActivity:
 			m.modelActivityScrollUp()
 		case tabHardware:
-			m.vp.LineUp(1)
+			m.vp.ScrollUp(1)
 		case tabLogs:
 			m.logScrollUp()
 		case tabModels:

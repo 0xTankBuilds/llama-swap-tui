@@ -91,7 +91,7 @@ func startFakeAPI(t *testing.T) *httptest.Server {
 	mux := http.NewServeMux()
 	write := func(body string) http.HandlerFunc {
 		return func(w http.ResponseWriter, _ *http.Request) {
-			w.Write([]byte(body))
+			_, _ = w.Write([]byte(body))
 		}
 	}
 	mux.HandleFunc("/api/version", write(`{"version":"1.0","commit":"x","build_date":"y"}`))

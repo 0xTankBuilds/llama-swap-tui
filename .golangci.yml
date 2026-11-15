@@ -1,0 +1,28 @@
+# golangci-lint configuration (v2). The enabled linters are the default set,
+# listed explicitly so the choice is visible. Run locally with
+# `golangci-lint run ./...` (pinned to v2.15.0 in CI).
+version: "2"
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+  exclusions:
+    rules:
+      # Ignoring a response body Close error is standard: the body is
+      # already fully read or the request failed, so the error carries
+      # nothing actionable. This keeps `defer resp.Body.Close()` readable
+      # instead of wrapping it in an anonymous func just for errcheck.
+      # (errcheck's exclude-functions did not match this call under v2,
+      # so the exclusion is by issue text.)
+      - linters:
+          - errcheck
+        text: "resp\\.Body\\.Close"
+  settings:
+    staticcheck:
+      # QF1012 (use fmt.Fprintf instead of WriteString(fmt.Sprintf)) is off:
+      # the codebase builds rendered output with b.WriteString(fmt.Sprintf(...))
+      # in ~30 places, a consistent idiom; rewriting them all buys nothing.
+      checks: ["all", "-QF1012"]

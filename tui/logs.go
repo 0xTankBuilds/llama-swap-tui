@@ -120,11 +120,11 @@ func (m *Model) cycleLogFilter() {
 }
 
 func (m *Model) logScrollDown() {
-	m.vp.LineDown(1)
+	m.vp.ScrollDown(1)
 }
 
 func (m *Model) logScrollUp() {
-	m.vp.LineUp(1)
+	m.vp.ScrollUp(1)
 }
 
 func (m *Model) logScrollToBottom() {
