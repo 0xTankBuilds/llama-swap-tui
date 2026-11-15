@@ -106,7 +106,10 @@ main() {
 		echo "dry run: would tag $next_tag"
 		return 0
 	fi
-	git -C "$REPO_ROOT" tag -a "$next_tag" -m "Release $next_tag"
+	# An annotated tag needs a committer identity, and the Actions runner
+	# has none configured, so the tag command carries it with -c. Scoped
+	# to this one command: local runs keep the user's own identity.
+	git -C "$REPO_ROOT" -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" tag -a "$next_tag" -m "Release $next_tag"
 	git -C "$REPO_ROOT" push origin "$next_tag"
 	echo "tagged and pushed $next_tag"
 }
