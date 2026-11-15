@@ -1,0 +1,48 @@
+name: auto-tag
+
+# Weekly releases: every Sunday night, tag the next version from the PRs
+# merged since the last tag, and let the release workflow publish it.
+# Bump rules (from squash-merged PR titles): feat -> minor, anything else
+# -> patch, a breaking change (type! or BREAKING CHANGE) -> major.
+# Weeks with no merged PRs tag nothing.
+"on":
+  schedule:
+    # Sundays 13:00 UTC = 21:00 HKT.
+    - cron: "0 13 * * 0"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Print the tag that would be created without pushing it"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  auto-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # The tag must be pushed with a personal access token, not the
+          # built-in GITHUB_TOKEN: pushes made with GITHUB_TOKEN do not
+          # trigger other workflows, so the release workflow would never
+          # fire. Checking out with RELEASE_PAT makes the push use it.
+          token: ${{ secrets.RELEASE_PAT }}
+      - name: Check release token is configured
+        env:
+          RELEASE_PAT: ${{ secrets.RELEASE_PAT }}
+        run: |
+          if [ -z "$RELEASE_PAT" ]; then
+            echo "::error::RELEASE_PAT secret is not set. Add the fine-grained PAT (Contents: write) as a repository secret named RELEASE_PAT: Settings -> Secrets and variables -> Actions -> New repository secret."
+            exit 1
+          fi
+      - name: Auto-tag release (dry run)
+        if: ${{ inputs.dry_run }}
+        run: bash scripts/auto-tag.sh --dry-run
+      - name: Auto-tag release
+        if: ${{ !inputs.dry_run }}
+        run: bash scripts/auto-tag.sh

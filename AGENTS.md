@@ -46,7 +46,7 @@ llama-swap-tui/
 | Vet     | `go vet ./...` |
 | Run     | `./llama-swap-tui` or `LLAMA_SWAP_URL=http://host:8080 ./llama-swap-tui` |
 
-CI runs on PRs to master via `.github/workflows/ci.yml` (`go vet`, `go build`, `go test -v`). Tagged releases (`v*.*.*`) publish binaries via `.github/workflows/release.yml` (GoReleaser).
+CI runs on PRs to master via `.github/workflows/ci.yml` (`go vet`, `go build`, `go test -v`). Tagged releases (`v*.*.*`) publish binaries via `.github/workflows/release.yml` (GoReleaser). Weekly releases are tagged automatically by `.github/workflows/auto-tag.yml` (see AUTO-TAGGING below).
 
 ## CODING STANDARDS
 *   **Language**: Go 1.24.2. Standard library imports first, then third-party, then project-local (`llama-swap-tui/api`, `llama-swap-tui/tui`).
@@ -70,6 +70,11 @@ CI runs on PRs to master via `.github/workflows/ci.yml` (`go vet`, `go build`, `
 `scripts/smoke-test.sh` boots the real binary against `cmd/mock-llama-swap` (a fake llama-swap serving the boot-time endpoints with canned data: version, models, activity, stats, hardware, profiles, performance, tailcat, the SSE event stream, and the log stream) and asserts, over tmux pane captures: the title row shows the app and host, the status bar shows connected with the mock API version and the binary version, no `Error:` line appears, tab keys 1-6 all render (Models lists the mock model, Logs shows the mock log line), and `q` quits cleanly. Flags: `--binary`/`--mock` to skip building, `--port`, `--expect-version` (defaults to `dev`; the post-release workflow passes the release tag).
 
 Runs in CI on every PR (the `smoke` job in `.github/workflows/ci.yml`) and after every published release (`.github/workflows/smoke-release.yml`, which downloads the Linux amd64 asset and re-runs the same script against it). The TUI needs a real TTY, so the script runs it inside tmux at 128x32; install tmux explicitly in CI rather than assuming the runner image ships it.
+
+## AUTO-TAGGING
+`scripts/auto-tag.sh` tags the next release from merged PRs; `.github/workflows/auto-tag.yml` runs it every Sunday at 21:00 HKT, and it can also be run manually from the Actions tab (with a dry-run option). It reads the squash-merged PR titles since the last tag (`git log` subjects ending in ` (#N)`), bumps SemVer from them (`feat` -> minor, anything else -> patch, `type!` or `BREAKING CHANGE` -> major), and pushes an annotated tag, which triggers the release workflow. Weeks with no merged PRs tag nothing; if the computed tag already exists it exits quietly. With no tags at all the first tag is `v1.0.0`. Run it locally with `bash scripts/auto-tag.sh --dry-run`.
+
+Setup: the workflow needs a repository secret named `RELEASE_PAT` holding a fine-grained PAT with Contents write. The tag must be pushed with that token, not the built-in `GITHUB_TOKEN`: pushes made with `GITHUB_TOKEN` do not trigger other workflows, so the release workflow would never fire. The workflow fails fast with a clear error when the secret is missing.
 
 ## SCREENSHOTS
 Tab screenshots in `docs/screenshots/` are captured from a **live** TUI session: tmux → ANSI capture → Pillow render via `scripts/mkshot.py`. The TUI requires a real TTY (`/dev/tty`), so it cannot run headless in a plain subprocess.
@@ -103,7 +108,7 @@ Note: the Logs tab tails `/logs/stream` live — if it's empty ("No logs yet"), 
 *   **Style**: `tui/style.go`
 
 ## NOTES
-*   Version is injected at build time: `var version = "dev"` in `main.go`, overridden by GoReleaser via `-X main.version={{.Version}}` on tagged releases (see `.goreleaser.yaml` and `.github/workflows/release.yml`).
+*   Version is injected at build time: `var version = "dev"` in `main.go`, overridden by GoReleaser via `-X main.version=v{{.Version}}` on tagged releases (see `.goreleaser.yaml` and `.github/workflows/release.yml`).
 *   **Status Dashboard** (PR #3): New tab with 4 cards — In-flight requests (with elapsed bars), Loaded Models (state breakdown), GPU (VRAM/util/power bars), Recent Activity (last 10 requests, auto-refreshing every 1s).
 *   The binary `llama-swap-tui` is built locally from source; it is gitignored and **not** tracked (earlier revisions of this file wrongly claimed it was committed).
 *   Known gap: `/api/performance` answers HTTP 503 `{"enabled": false}` when `performance.disabled: true`. `PerformanceResponse` has no `Enabled` field and `doJSON` rejects non-200, so monitoring-disabled servers show empty Hardware/GPU sections with no explanation — and silently, since `FetchErrMsg` is discarded.
