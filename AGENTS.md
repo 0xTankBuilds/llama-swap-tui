@@ -58,7 +58,7 @@ CI runs on PRs to master via `.github/workflows/ci.yml` (format check, `go vet`,
     *   `SSEErrMsg{err error}` — sent only from `sseReader`; sets `conn = connDisconnected` and `errMsg`.
     *   `FetchErrMsg{err error}` — returned by every REST poll Cmd; deliberately **discarded** by `Update`. Polls keep the last good data, the 1s tick retries, and SSE alone decides connectivity.
     Both are structs on purpose: the old `type SSEErrMsg error` was an interface type, so `case SSEErrMsg:` matched *any* error value — a single REST 404 disconnected the app and blanked the Activity/Models tabs. Never send a bare `error` as a `tea.Msg`. `log.SetOutput(os.Stderr)` in `main.go` only covers startup/`--host` failures; poll errors are never logged, so a permanently failing endpoint renders as an empty tab with no message.
-*   **Commit convention**: Use Conventional Commits format — `type(scope): description`. Types: `fix`, `feat`, `docs`, `chore`. Scopes: `tui`, `api`, `activity`, `models`, `hardware`, `status`. Always use the project's existing scope names (e.g. `tui` for general TUI changes, not `status` or `dashboard`).
+*   **Commit convention**: Use Conventional Commits format — `type(scope): description`. Types: `fix`, `feat`, `docs`, `chore`. Scopes: `tui`, `api`, `activity`, `models`, `hardware`, `status`, `ci`. Always use the project's existing scope names (e.g. `tui` for general TUI changes, not `status` or `dashboard`).
 
 ## TESTS
 *   `tui/hscroll_test.go` — Unit tests for horizontal scrolling with ANSI escape sequences, offset clamping, and adaptive column rendering.

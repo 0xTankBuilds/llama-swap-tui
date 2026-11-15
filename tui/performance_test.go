@@ -175,5 +175,13 @@ func TestFetchPerformanceLive(t *testing.T) {
 			t.Fatalf("second fetchPerformance: %v", err)
 		}
 	}
-	_, _ = m.Update(msg)
+	next, _ = m.Update(msg)
+	m = next.(*Model)
+
+	if m.sysStat == nil {
+		t.Fatal("sysStat not seeded after second poll")
+	}
+	if len(m.gpuStats) == 0 {
+		t.Fatal("gpuStats not seeded after second poll")
+	}
 }

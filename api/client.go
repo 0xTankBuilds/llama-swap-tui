@@ -227,7 +227,7 @@ func (c *Client) doJSON(ctx context.Context, path string, v interface{}) error {
 	if err != nil {
 		return fmt.Errorf("GET %s: %w", path, err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("GET %s: HTTP %d", path, resp.StatusCode)
@@ -268,7 +268,7 @@ func (c *Client) doJSONPost(ctx context.Context, path string, body interface{}, 
 	if err != nil {
 		return fmt.Errorf("POST %s: %w", path, err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 		bodyBytes, _ := io.ReadAll(resp.Body)
@@ -310,7 +310,7 @@ func (c *Client) doJSONPut(ctx context.Context, path string, body interface{}, v
 	if err != nil {
 		return fmt.Errorf("PUT %s: %w", path, err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
@@ -563,7 +563,7 @@ func (c *Client) LoadModel(ctx context.Context, model string) error {
 	if err != nil {
 		return fmt.Errorf("load model %s: %w", model, err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("load model %s: HTTP %d", model, resp.StatusCode)
