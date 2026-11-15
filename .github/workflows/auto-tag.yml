@@ -1,14 +1,17 @@
 name: auto-tag
 
-# Weekly releases: every Sunday night, tag the next version from the PRs
+# Weekly releases: every Sunday afternoon (HKT), tag the next version from the PRs
 # merged since the last tag, and let the release workflow publish it.
 # Bump rules (from squash-merged PR titles): feat -> minor, anything else
 # -> patch, a breaking change (type! or BREAKING CHANGE) -> major.
 # Weeks with no merged PRs tag nothing.
 "on":
   schedule:
-    # Sundays 13:00 UTC = 21:00 HKT.
-    - cron: "0 13 * * 0"
+    # Sundays 08:17 UTC = 16:17 HKT. Off-peak: outside the overnight UTC
+    # band where most scheduled jobs cluster, and off the top of the hour
+    # (GitHub names the start of every hour a high-load time, and can drop
+    # a scheduled run entirely).
+    - cron: "17 8 * * 0"
   workflow_dispatch:
     inputs:
       dry_run:
