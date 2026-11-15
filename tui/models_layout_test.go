@@ -102,7 +102,7 @@ func startFakeAPI(t *testing.T) *httptest.Server {
 	mux.HandleFunc("/api/hardware", write(`{}`))
 	mux.HandleFunc("/api/profiles", write(`{"active":"default","profiles":[]}`))
 	mux.HandleFunc("/api/performance",
-		write(`{"sys_stats":[{"timestamp":"t1","mem_total_mb":100,"mem_used_mb":10}],` +
+		write(`{"sys_stats":[{"timestamp":"t1","mem_total_mb":100,"mem_used_mb":10}],`+
 			`"gpu_stats":[{"timestamp":"t1","id":0,"name":"T","gpu_util_pct":10}]}`))
 	return httptest.NewServer(mux)
 }

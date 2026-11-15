@@ -19,26 +19,26 @@ const (
 
 // Semantic colors
 const (
-	colorStatusReady   = "#6B8E6B" // green — ready, success, proxy source
+	colorStatusReady    = "#6B8E6B" // green — ready, success, proxy source
 	colorStatusStarting = "#C4B840" // yellow — starting
 	colorStatusStopping = "#D4A574" // amber — stopping (matches accent)
 	colorStatusStopped  = "#5C5850" // gray — stopped
 	colorStatusError    = "#C75656" // red — errors, 500s
 	colorStatusWarning  = "#D4A574" // amber — warnings, 400s
-	colorInfo           = "#0BB"   // blue — info, upstream source
+	colorInfo           = "#0BB"    // blue — info, upstream source
 	colorLoading        = "#C4B840" // yellow — loading state
 )
 
 // UI constants
 const (
-	tabWidth          = 12
-	tabPadding        = 2
-	contentPadding    = 4
-	statusBarPadding  = 4
-	separatorChar     = "─"
-	tabBorderChar     = "│"
-	fontWeightBold    = true
-	fontWeightNormal  = false
-	textAlignCenter   = lipgloss.Center
-	textAlignLeft     = lipgloss.Left
+	tabWidth         = 12
+	tabPadding       = 2
+	contentPadding   = 4
+	statusBarPadding = 4
+	separatorChar    = "─"
+	tabBorderChar    = "│"
+	fontWeightBold   = true
+	fontWeightNormal = false
+	textAlignCenter  = lipgloss.Center
+	textAlignLeft    = lipgloss.Left
 )

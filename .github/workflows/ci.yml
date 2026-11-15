@@ -16,6 +16,17 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - name: Check formatting
+        # Fail if any Go file is not gofmt-clean. The pre-existing drift
+        # was reformatted in the same PR that added this step, so the
+        # tree is clean from here on.
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "these files are not gofmt-clean (run gofmt -w on them):" >&2
+            echo "$unformatted" >&2
+            exit 1
+          fi
       - name: Vet
         run: go vet ./...
       - name: Build

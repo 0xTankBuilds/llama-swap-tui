@@ -10,39 +10,39 @@ import "time"
 type ModelStatus string
 
 const (
-	ModelReady     ModelStatus = "ready"
-	ModelStarting  ModelStatus = "starting"
-	ModelStopping  ModelStatus = "stopping"
-	ModelStopped   ModelStatus = "stopped"
-	ModelShutdown  ModelStatus = "shutdown"
-	ModelUnknown   ModelStatus = "unknown"
+	ModelReady    ModelStatus = "ready"
+	ModelStarting ModelStatus = "starting"
+	ModelStopping ModelStatus = "stopping"
+	ModelStopped  ModelStatus = "stopped"
+	ModelShutdown ModelStatus = "shutdown"
+	ModelUnknown  ModelStatus = "unknown"
 )
 
 // ModelCapabilities describes what modalities a model supports.
 type ModelCapabilities struct {
-	Vision          bool `json:"vision,omitempty"`
+	Vision              bool `json:"vision,omitempty"`
 	AudioTranscriptions bool `json:"audio_transcriptions,omitempty"`
-	AudioSpeech     bool `json:"audio_speech,omitempty"`
-	ImageGeneration bool `json:"image_generation,omitempty"`
-	ImageToImage    bool `json:"image_to_image,omitempty"`
-	FunctionCalling bool `json:"function_calling,omitempty"`
-	Reranker        bool `json:"reranker,omitempty"`
+	AudioSpeech         bool `json:"audio_speech,omitempty"`
+	ImageGeneration     bool `json:"image_generation,omitempty"`
+	ImageToImage        bool `json:"image_to_image,omitempty"`
+	FunctionCalling     bool `json:"function_calling,omitempty"`
+	Reranker            bool `json:"reranker,omitempty"`
 }
 
 // Model represents a configured model with its current state.
 type Model struct {
-	ID            string              `json:"id"`
-	State         ModelStatus         `json:"state"`
-	Name          string              `json:"name"`
-	Description   string              `json:"description"`
-	Unlisted      bool                `json:"unlisted"`
-	PeerID        string              `json:"peerID"`
-	Aliases       []string            `json:"aliases,omitempty"`
-	Capabilities  *ModelCapabilities  `json:"capabilities,omitempty"`
-	ContextLength int                 `json:"context_length,omitempty"`
-	Strategy      string              `json:"strategy,omitempty"`
-	Targets       []string            `json:"targets,omitempty"`
-	Spillover     int                 `json:"spillover,omitempty"`
+	ID            string             `json:"id"`
+	State         ModelStatus        `json:"state"`
+	Name          string             `json:"name"`
+	Description   string             `json:"description"`
+	Unlisted      bool               `json:"unlisted"`
+	PeerID        string             `json:"peerID"`
+	Aliases       []string           `json:"aliases,omitempty"`
+	Capabilities  *ModelCapabilities `json:"capabilities,omitempty"`
+	ContextLength int                `json:"context_length,omitempty"`
+	Strategy      string             `json:"strategy,omitempty"`
+	Targets       []string           `json:"targets,omitempty"`
+	Spillover     int                `json:"spillover,omitempty"`
 }
 
 // ---------------------------------------------------------------------------
@@ -79,17 +79,17 @@ type TokenMetrics struct {
 
 // ActivityLogEntry is a single row in the activity log.
 type ActivityLogEntry struct {
-	ID              int           `json:"id"`
-	Timestamp       time.Time     `json:"timestamp"`
-	Src             string        `json:"src"`
-	Model           string        `json:"model"`
-	ReqPath         string        `json:"req_path"`
-	RespContentType string        `json:"resp_content_type"`
-	RespStatusCode  int           `json:"resp_status_code"`
-	Tokens          TokenMetrics  `json:"tokens"`
-	DurationMs      int           `json:"duration_ms"`
-	HasCapture      bool          `json:"has_capture"`
-	ErrorMsg        string        `json:"error_msg,omitempty"`
+	ID              int               `json:"id"`
+	Timestamp       time.Time         `json:"timestamp"`
+	Src             string            `json:"src"`
+	Model           string            `json:"model"`
+	ReqPath         string            `json:"req_path"`
+	RespContentType string            `json:"resp_content_type"`
+	RespStatusCode  int               `json:"resp_status_code"`
+	Tokens          TokenMetrics      `json:"tokens"`
+	DurationMs      int               `json:"duration_ms"`
+	HasCapture      bool              `json:"has_capture"`
+	ErrorMsg        string            `json:"error_msg,omitempty"`
 	Metadata        map[string]string `json:"metadata,omitempty"`
 }
 
@@ -104,11 +104,11 @@ type ActivityPage struct {
 
 // ActivityStats is the response from GET /api/metrics/stats.
 type ActivityStats struct {
-	TotalRequests     int            `json:"total_requests"`
-	TotalInputTokens  int            `json:"total_input_tokens"`
-	TotalOutputTokens int            `json:"total_output_tokens"`
-	TotalCacheTokens  int            `json:"total_cache_tokens"`
-	PromptHistogram   *HistogramData `json:"prompt_histogram"`
+	TotalRequests       int            `json:"total_requests"`
+	TotalInputTokens    int            `json:"total_input_tokens"`
+	TotalOutputTokens   int            `json:"total_output_tokens"`
+	TotalCacheTokens    int            `json:"total_cache_tokens"`
+	PromptHistogram     *HistogramData `json:"prompt_histogram"`
 	GenerationHistogram *HistogramData `json:"gen_histogram"`
 }
 
@@ -129,26 +129,26 @@ type HistogramData struct {
 
 // InflightRequestEntry represents a request currently being processed.
 type InflightRequestEntry struct {
-	ID              string            `json:"id"`
-	Timestamp       time.Time         `json:"timestamp"`
-	Model           string            `json:"model"`
-	ReqPath         string            `json:"req_path"`
-	Method          string            `json:"method"`
-	ReqHeaders      map[string]string `json:"req_headers"`
-	RemoteIP        string            `json:"remote_ip"`
-	RespHeaders     map[string]string `json:"resp_headers"`
-	RespBytes       int64             `json:"resp_bytes"`
-	ElapsedMs       int64             `json:"elapsed_ms"`
-	Metadata        map[string]string `json:"metadata,omitempty"`
-	ClientReceivedAt int64            `json:"client_received_at_ms,omitempty"`
+	ID               string            `json:"id"`
+	Timestamp        time.Time         `json:"timestamp"`
+	Model            string            `json:"model"`
+	ReqPath          string            `json:"req_path"`
+	Method           string            `json:"method"`
+	ReqHeaders       map[string]string `json:"req_headers"`
+	RemoteIP         string            `json:"remote_ip"`
+	RespHeaders      map[string]string `json:"resp_headers"`
+	RespBytes        int64             `json:"resp_bytes"`
+	ElapsedMs        int64             `json:"elapsed_ms"`
+	Metadata         map[string]string `json:"metadata,omitempty"`
+	ClientReceivedAt int64             `json:"client_received_at_ms,omitempty"`
 }
 
 // InFlightStats describes an SSE inflight event.
 type InFlightStats struct {
-	Operation string                  `json:"operation"` // "snapshot", "upsert", "remove"
-	Requests  []InflightRequestEntry  `json:"requests,omitempty"`
-	Request   *InflightRequestEntry   `json:"request,omitempty"`
-	ID        string                  `json:"id,omitempty"`
+	Operation string                 `json:"operation"` // "snapshot", "upsert", "remove"
+	Requests  []InflightRequestEntry `json:"requests,omitempty"`
+	Request   *InflightRequestEntry  `json:"request,omitempty"`
+	ID        string                 `json:"id,omitempty"`
 }
 
 // ---------------------------------------------------------------------------
@@ -157,26 +157,29 @@ type InFlightStats struct {
 
 // HardwareSnapshot is the response from GET /api/hardware.
 type HardwareSnapshot struct {
-	SchemaVersion  int                 `json:"schema_version"`
-	CapturedAt     time.Time           `json:"captured_at"`
-	Capture        HardwareCapture     `json:"capture"`
-	Architecture   HardwareArchitecture `json:"architecture"`
+	SchemaVersion   int                     `json:"schema_version"`
+	CapturedAt      time.Time               `json:"captured_at"`
+	Capture         HardwareCapture         `json:"capture"`
+	Architecture    HardwareArchitecture    `json:"architecture"`
 	OperatingSystem HardwareOperatingSystem `json:"operating_system"`
-	Environment    HardwareEnvironment   `json:"environment"`
-	CPU            HardwareCPU         `json:"cpu"`
-	Memory         HardwareMemory      `json:"memory"`
-	Accelerators   []HardwareAccelerator `json:"accelerators"`
+	Environment     HardwareEnvironment     `json:"environment"`
+	CPU             HardwareCPU             `json:"cpu"`
+	Memory          HardwareMemory          `json:"memory"`
+	Accelerators    []HardwareAccelerator   `json:"accelerators"`
 }
 
 type HardwareCapture struct {
-	Scope    string                                  `json:"scope"`
-	Method   string                                  `json:"method"`
-	Detector *struct{ Name string; Version string }   `json:"detector"`
+	Scope    string `json:"scope"`
+	Method   string `json:"method"`
+	Detector *struct {
+		Name    string
+		Version string
+	} `json:"detector"`
 }
 
 type HardwareArchitecture struct {
-	Name     string `json:"name"`
-	RawName  *string `json:"raw_name,omitempty"`
+	Name    string  `json:"name"`
+	RawName *string `json:"raw_name,omitempty"`
 }
 
 type HardwareOperatingSystem struct {
@@ -195,11 +198,11 @@ type HardwareEnvironment struct {
 }
 
 type HardwareCPU struct {
-	Vendor           *string `json:"vendor,omitempty"`
-	Model            *string `json:"model,omitempty"`
-	SocketCount      *int    `json:"socket_count,omitempty"`
-	PhysicalCoreCount *int   `json:"physical_core_count,omitempty"`
-	LogicalThreadCount *int   `json:"logical_thread_count,omitempty"`
+	Vendor             *string `json:"vendor,omitempty"`
+	Model              *string `json:"model,omitempty"`
+	SocketCount        *int    `json:"socket_count,omitempty"`
+	PhysicalCoreCount  *int    `json:"physical_core_count,omitempty"`
+	LogicalThreadCount *int    `json:"logical_thread_count,omitempty"`
 }
 
 type HardwareMemory struct {
@@ -207,19 +210,19 @@ type HardwareMemory struct {
 }
 
 type HardwareAccelerator struct {
-	Index          int                  `json:"index"`
-	Kind           string               `json:"kind"` // "gpu", "npu", "other"
-	Vendor         *string              `json:"vendor,omitempty"`
-	Model          *string              `json:"model,omitempty"`
-	Architecture   *string              `json:"architecture,omitempty"`
-	Memory         *HardwareMemInfo     `json:"memory,omitempty"`
-	Driver         *HardwareDriver      `json:"driver,omitempty"`
-	PowerLimitWatts *int               `json:"power_limit_watts,omitempty"`
+	Index           int              `json:"index"`
+	Kind            string           `json:"kind"` // "gpu", "npu", "other"
+	Vendor          *string          `json:"vendor,omitempty"`
+	Model           *string          `json:"model,omitempty"`
+	Architecture    *string          `json:"architecture,omitempty"`
+	Memory          *HardwareMemInfo `json:"memory,omitempty"`
+	Driver          *HardwareDriver  `json:"driver,omitempty"`
+	PowerLimitWatts *int             `json:"power_limit_watts,omitempty"`
 }
 
 type HardwareMemInfo struct {
-	Kind          string  `json:"kind"` // "dedicated", "unified", "shared_system", "unknown"
-	CapacityBytes *int64  `json:"capacity_bytes,omitempty"`
+	Kind          string `json:"kind"` // "dedicated", "unified", "shared_system", "unknown"
+	CapacityBytes *int64 `json:"capacity_bytes,omitempty"`
 }
 
 type HardwareDriver struct {
@@ -229,33 +232,33 @@ type HardwareDriver struct {
 
 // SysStat is a system performance snapshot from SSE perfsys.
 type SysStat struct {
-	Timestamp      string    `json:"timestamp"`
-	CPUUtilPerCore []float64 `json:"cpu_util_per_core"`
-	MemTotalMB     int       `json:"mem_total_mb"`
-	MemUsedMB      int       `json:"mem_used_mb"`
-	MemFreeMB      int       `json:"mem_free_mb"`
-	SwapTotalMB    int       `json:"swap_total_mb"`
-	SwapUsedMB     int       `json:"swap_used_mb"`
-	LoadAvg1       float64   `json:"load_avg_1"`
-	LoadAvg5       float64   `json:"load_avg_5"`
-	LoadAvg15      float64   `json:"load_avg_15"`
+	Timestamp      string      `json:"timestamp"`
+	CPUUtilPerCore []float64   `json:"cpu_util_per_core"`
+	MemTotalMB     int         `json:"mem_total_mb"`
+	MemUsedMB      int         `json:"mem_used_mb"`
+	MemFreeMB      int         `json:"mem_free_mb"`
+	SwapTotalMB    int         `json:"swap_total_mb"`
+	SwapUsedMB     int         `json:"swap_used_mb"`
+	LoadAvg1       float64     `json:"load_avg_1"`
+	LoadAvg5       float64     `json:"load_avg_5"`
+	LoadAvg15      float64     `json:"load_avg_15"`
 	NetIO          []NetIOStat `json:"net_io"`
 }
 
 // GpuStat is a GPU performance snapshot from SSE perfgpu.
 type GpuStat struct {
-	Timestamp     string  `json:"timestamp"`
-	ID            int     `json:"id"`
-	Name          string  `json:"name"`
-	UUID          string  `json:"uuid"`
-	TempC         int     `json:"temp_c"`
-	VramTempC     int     `json:"vram_temp_c"`
-	GpuUtilPct    float64 `json:"gpu_util_pct"`
-	MemUtilPct    float64 `json:"mem_util_pct"`
-	MemUsedMB     int     `json:"mem_used_mb"`
-	MemTotalMB    int     `json:"mem_total_mb"`
-	FanSpeedPct   float64 `json:"fan_speed_pct"`
-	PowerDrawW    float64 `json:"power_draw_w"`
+	Timestamp   string  `json:"timestamp"`
+	ID          int     `json:"id"`
+	Name        string  `json:"name"`
+	UUID        string  `json:"uuid"`
+	TempC       int     `json:"temp_c"`
+	VramTempC   int     `json:"vram_temp_c"`
+	GpuUtilPct  float64 `json:"gpu_util_pct"`
+	MemUtilPct  float64 `json:"mem_util_pct"`
+	MemUsedMB   int     `json:"mem_used_mb"`
+	MemTotalMB  int     `json:"mem_total_mb"`
+	FanSpeedPct float64 `json:"fan_speed_pct"`
+	PowerDrawW  float64 `json:"power_draw_w"`
 }
 
 // PerformanceResponse from GET /api/performance.
@@ -266,9 +269,9 @@ type PerformanceResponse struct {
 
 // NetIOStat is a network I/O stat.
 type NetIOStat struct {
-	Name       string `json:"name"`
-	BytesRecv  int64  `json:"bytes_recv"`
-	BytesSent  int64  `json:"bytes_sent"`
+	Name      string `json:"name"`
+	BytesRecv int64  `json:"bytes_recv"`
+	BytesSent int64  `json:"bytes_sent"`
 }
 
 // ---------------------------------------------------------------------------

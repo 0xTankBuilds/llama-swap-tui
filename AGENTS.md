@@ -46,7 +46,7 @@ llama-swap-tui/
 | Vet     | `go vet ./...` |
 | Run     | `./llama-swap-tui` or `LLAMA_SWAP_URL=http://host:8080 ./llama-swap-tui` |
 
-CI runs on PRs to master via `.github/workflows/ci.yml` (`go vet`, `go build`, `go test -v`). Tagged releases (`v*.*.*`) publish binaries via `.github/workflows/release.yml` (GoReleaser). Weekly releases are tagged automatically by `.github/workflows/auto-tag.yml` (see AUTO-TAGGING below).
+CI runs on PRs to master via `.github/workflows/ci.yml` (format check, `go vet`, `go build`, `go test -v`, plus a smoke test that boots the binary against a mock server). Tagged releases (`v*.*.*`) publish binaries via `.github/workflows/release.yml` (GoReleaser). Weekly releases are tagged automatically by `.github/workflows/auto-tag.yml` (see AUTO-TAGGING below).
 
 ## CODING STANDARDS
 *   **Language**: Go 1.24.2. Standard library imports first, then third-party, then project-local (`llama-swap-tui/api`, `llama-swap-tui/tui`).
