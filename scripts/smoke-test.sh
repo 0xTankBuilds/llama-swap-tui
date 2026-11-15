@@ -105,7 +105,23 @@ echo "mock ready at $HOST"
 # the same way scripts/mkshot.py does it.
 tmux new-session -d -s "$SESSION" "$BIN --host $HOST"
 tmux resize-window -t "$SESSION" -x 128 -y 32
-sleep 4
+# Wait for the TUI to reach the connected state, polling the pane the same
+# way the mock-ready loop polls the mock: a fixed sleep here is the first
+# thing to go flaky on a slow runner. Note "connected" is a substring of
+# "disconnected", so the loop needs the lacks check too.
+CONNECTED=0
+for _ in $(seq 1 40); do
+	if capture_contains "connected" && capture_lacks "disconnected" && capture_contains "llama-swap-tui [$HOST]"; then
+		CONNECTED=1
+		break
+	fi
+	sleep 0.5
+done
+if [[ "$CONNECTED" -ne 1 ]]; then
+	echo "FAIL: TUI did not reach connected state after boot"
+	tmux capture-pane -t "$SESSION" -p >&2 || true
+	exit 1
+fi
 
 check "process stays alive after boot" tmux has-session -t "$SESSION"
 check "title row shows app and host" capture_contains "llama-swap-tui [$HOST]"
