@@ -41,6 +41,7 @@ llama-swap-tui/
 |--------|---------|
 | Install | `go mod download` |
 | Test    | `go test ./...` |
+| Smoke test | `./scripts/smoke-test.sh` (builds the binary and the mock itself) |
 | Build   | `go build -o llama-swap-tui .` |
 | Vet     | `go vet ./...` |
 | Run     | `./llama-swap-tui` or `LLAMA_SWAP_URL=http://host:8080 ./llama-swap-tui` |
@@ -64,6 +65,11 @@ CI runs on PRs to master via `.github/workflows/ci.yml` (`go vet`, `go build`, `
 *   `tui/models_layout_test.go` — Models tab clipping/layout, fetch cmd race safety, tab line-count budgets, activity header alignment, window-height fit (incl. error state).
 *   `tui/tick_test.go` — Auto-refresh tick delivers `time.Time` messages and reschedules itself.
 *   `tui/header_conn_test.go` — Header connection dot color/rendering, stale error cleared on reconnect, and REST poll failures not marking the app disconnected.
+
+## SMOKE TESTS
+`scripts/smoke-test.sh` boots the real binary against `cmd/mock-llama-swap` (a fake llama-swap serving the boot-time endpoints with canned data: version, models, activity, stats, hardware, profiles, performance, tailcat, the SSE event stream, and the log stream) and asserts, over tmux pane captures: the title row shows the app and host, the status bar shows connected with the mock API version and the binary version, no `Error:` line appears, tab keys 1-6 all render (Models lists the mock model, Logs shows the mock log line), and `q` quits cleanly. Flags: `--binary`/`--mock` to skip building, `--port`, `--expect-version` (defaults to `dev`; the post-release workflow passes the release tag).
+
+Runs in CI on every PR (the `smoke` job in `.github/workflows/ci.yml`) and after every published release (`.github/workflows/smoke-release.yml`, which downloads the Linux amd64 asset and re-runs the same script against it). The TUI needs a real TTY, so the script runs it inside tmux at 128x32; install tmux explicitly in CI rather than assuming the runner image ships it.
 
 ## SCREENSHOTS
 Tab screenshots in `docs/screenshots/` are captured from a **live** TUI session: tmux → ANSI capture → Pillow render via `scripts/mkshot.py`. The TUI requires a real TTY (`/dev/tty`), so it cannot run headless in a plain subprocess.
