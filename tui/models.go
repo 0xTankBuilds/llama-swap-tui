@@ -67,7 +67,7 @@ func (m *Model) renderLoadModelInput() string {
 		Render("  Load Model") + "\n")
 	b.WriteString(lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorBorder)).
-		Render("  " + strings.Repeat("-", 40)) + "\n")
+		Render("  "+strings.Repeat("-", 40)) + "\n")
 	b.WriteString("\n")
 	b.WriteString("  " + m.loadModelInput.View() + "\n")
 	b.WriteString("\n")
@@ -230,7 +230,7 @@ func (m *Model) renderModelDetail(width, maxH int) string {
 	// Details pane (the model title lives in the sticky header line)
 	b.WriteString(lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorBorder)).
-		Render("  " + strings.Repeat("-", width-4)) + "\n")
+		Render("  "+strings.Repeat("-", width-4)) + "\n")
 
 	// Model details
 	stateColor := colorStatusStopped
@@ -272,7 +272,7 @@ func (m *Model) renderModelDetail(width, maxH int) string {
 		Render("  Activity") + "\n")
 	b.WriteString(lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorBorder)).
-		Render("  " + strings.Repeat("-", width-4)) + "\n")
+		Render("  "+strings.Repeat("-", width-4)) + "\n")
 
 	// Stats
 	if m.modelActivityStats != nil {

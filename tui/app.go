@@ -174,18 +174,18 @@ type LogLineMsg string
 // ---------------------------------------------------------------------------
 
 type keyMap struct {
-	Quit          key.Binding
-	Refresh       key.Binding
-	Help          key.Binding
-	NextTab       key.Binding
-	PrevTab       key.Binding
-	LoadModel     key.Binding
+	Quit            key.Binding
+	Refresh         key.Binding
+	Help            key.Binding
+	NextTab         key.Binding
+	PrevTab         key.Binding
+	LoadModel       key.Binding
 	LoadModelByName key.Binding
-	UnloadModel   key.Binding
-	CancelReq     key.Binding
-	SwitchProfile key.Binding
-	ScrollDown    key.Binding
-	ScrollUp      key.Binding
+	UnloadModel     key.Binding
+	CancelReq       key.Binding
+	SwitchProfile   key.Binding
+	ScrollDown      key.Binding
+	ScrollUp        key.Binding
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
@@ -202,18 +202,18 @@ func (k keyMap) FullHelp() []key.Binding {
 }
 
 var keys = keyMap{
-	Quit:          key.NewBinding(key.WithKeys("q", "ctrl+c")),
-	Refresh:       key.NewBinding(key.WithKeys("r")),
-	Help:          key.NewBinding(key.WithKeys("?")),
-	NextTab:       key.NewBinding(key.WithKeys("tab", "shift+tab", "n", "1", "2", "3", "4", "5")),
-	PrevTab:       key.NewBinding(key.WithKeys("h", "p")),
-	LoadModel:     key.NewBinding(key.WithKeys("l")),
+	Quit:            key.NewBinding(key.WithKeys("q", "ctrl+c")),
+	Refresh:         key.NewBinding(key.WithKeys("r")),
+	Help:            key.NewBinding(key.WithKeys("?")),
+	NextTab:         key.NewBinding(key.WithKeys("tab", "shift+tab", "n", "1", "2", "3", "4", "5")),
+	PrevTab:         key.NewBinding(key.WithKeys("h", "p")),
+	LoadModel:       key.NewBinding(key.WithKeys("l")),
 	LoadModelByName: key.NewBinding(key.WithKeys("L")),
-	UnloadModel:   key.NewBinding(key.WithKeys("u")),
-	CancelReq:     key.NewBinding(key.WithKeys("x")),
-	SwitchProfile: key.NewBinding(key.WithKeys("enter")),
-	ScrollDown:    key.NewBinding(key.WithKeys("j", "down", "pgdown")),
-	ScrollUp:      key.NewBinding(key.WithKeys("k", "up", "pgup")),
+	UnloadModel:     key.NewBinding(key.WithKeys("u")),
+	CancelReq:       key.NewBinding(key.WithKeys("x")),
+	SwitchProfile:   key.NewBinding(key.WithKeys("enter")),
+	ScrollDown:      key.NewBinding(key.WithKeys("j", "down", "pgdown")),
+	ScrollUp:        key.NewBinding(key.WithKeys("k", "up", "pgup")),
 }
 
 // ---------------------------------------------------------------------------
@@ -239,12 +239,12 @@ type Model struct {
 	totalPages    int
 
 	// Models
-	inflight        []api.InflightRequestEntry
-	loading         map[string]bool
-	statusMsg       string
-	statusTime      time.Time
-	selectedModel   string // name of selected model
-	modelActivity   api.ActivityPage
+	inflight           []api.InflightRequestEntry
+	loading            map[string]bool
+	statusMsg          string
+	statusTime         time.Time
+	selectedModel      string // name of selected model
+	modelActivity      api.ActivityPage
 	modelActivityStats *api.ActivityStats
 
 	// Live performance (SSE perfsys / perfgpu + /api/performance polling)
@@ -283,7 +283,7 @@ type Model struct {
 	logMax   int // max lines to keep
 
 	// Help
-	help   help.Model
+	help     help.Model
 	helpShow bool
 
 	// Error display
@@ -300,12 +300,12 @@ type Model struct {
 // NewModel creates a new TUI model.
 func NewModel(client *api.Client, version string) *Model {
 	m := &Model{
-		client:   client,
-		tab:      tabStatus,
-		conn:     connDisconnected,
-		logMax:   500,
-		help:     help.New(),
-		done:     make(chan struct{}),
+		client:     client,
+		tab:        tabStatus,
+		conn:       connDisconnected,
+		logMax:     500,
+		help:       help.New(),
+		done:       make(chan struct{}),
 		appVersion: version,
 	}
 	m.vp = viewport.New(80, 24)
@@ -778,9 +778,9 @@ func (m *Model) fetchModelActivity(modelName string) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		page, err := m.client.GetActivity(ctx, api.ActivityQueryParams{
-			Models:  []string{modelName},
-			Limit:   30,
-			Order:   "desc",
+			Models: []string{modelName},
+			Limit:  30,
+			Order:  "desc",
 		})
 		if err != nil {
 			return ModelActivityFetchedMsg{name: modelName}

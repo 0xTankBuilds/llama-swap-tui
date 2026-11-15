@@ -26,14 +26,14 @@ const (
 )
 
 type activityView struct {
-	page      api.ActivityPage
-	stats     *api.ActivityStats
-	sortCol   sortColumn
-	sortOrder string // "asc" or "desc"
-	filter    string // model filter
-	pageNum   int
+	page       api.ActivityPage
+	stats      *api.ActivityStats
+	sortCol    sortColumn
+	sortOrder  string // "asc" or "desc"
+	filter     string // model filter
+	pageNum    int
 	totalPages int
-	selected  int // selected row index
+	selected   int // selected row index
 }
 
 // ---------------------------------------------------------------------------
@@ -226,8 +226,8 @@ const (
 // columns plus separators, optionally including the token-count columns.
 func activityFixedWidth(withTokens bool) int {
 	w := 2 + // indent
-		colID+1 + colTime+1 + colModel+1 + colStatus+1 +
-		colPrefill+1 + colDecode+1 + colDur+1
+		colID + 1 + colTime + 1 + colModel + 1 + colStatus + 1 +
+		colPrefill + 1 + colDecode + 1 + colDur + 1
 	if withTokens {
 		w += colCached + colIn + colOut + 3 // + 3 separators
 	}
@@ -239,7 +239,7 @@ func activityFixedWidth(withTokens bool) int {
 // token counts are the first columns dropped on narrow terminals.
 func (m *Model) useTokenColumns() bool {
 	const minPathWidth = 12 // keep the path column readable
-	return m.vp.Width >= activityFixedWidth(true) + minPathWidth
+	return m.vp.Width >= activityFixedWidth(true)+minPathWidth
 }
 
 // renderActivityHeaderRaw builds the two header lines (column row +

@@ -41,7 +41,7 @@ func (m *Model) renderProfilesHeader() string {
 		Render("  Profiles") + "\n")
 	b.WriteString(lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorBorder)).
-		Render("  " + strings.Repeat("-", idW+descW+4)) + "\n")
+		Render("  "+strings.Repeat("-", idW+descW+4)) + "\n")
 	return b.String()
 }
 

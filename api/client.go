@@ -403,15 +403,15 @@ func (c *Client) GetActivityStats(ctx context.Context, model string) (*ActivityS
 func (c *Client) GetModels(ctx context.Context) ([]Model, error) {
 	var resp struct {
 		Data []struct {
-			ID          string                 `json:"id"`
-			Name        string                 `json:"name"`
-			Description string                 `json:"description"`
+			ID          string `json:"id"`
+			Name        string `json:"name"`
+			Description string `json:"description"`
 			Status      struct {
 				Value string `json:"value"`
 			} `json:"status"`
-			Capabilities *ModelCapabilities  `json:"capabilities,omitempty"`
-			ContextLength int                  `json:"context_length,omitempty"`
-			Meta         map[string]any         `json:"meta"`
+			Capabilities  *ModelCapabilities `json:"capabilities,omitempty"`
+			ContextLength int                `json:"context_length,omitempty"`
+			Meta          map[string]any     `json:"meta"`
 		} `json:"data"`
 	}
 	if err := c.doJSON(ctx, "/v1/models", &resp); err != nil {

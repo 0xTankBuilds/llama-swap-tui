@@ -44,7 +44,7 @@ func (m *Model) renderSystemInfo() string {
 		Render("  System Information") + "\n")
 	b.WriteString(lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorBorder)).
-		Render("  " + strings.Repeat("-", 40)) + "\n")
+		Render("  "+strings.Repeat("-", 40)) + "\n")
 
 	arch := m.hardware.Architecture.Name
 	if m.hardware.Architecture.RawName != nil {
@@ -86,7 +86,7 @@ func (m *Model) renderCPUSection() string {
 		Render("  CPU") + "\n")
 	b.WriteString(lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorBorder)).
-		Render("  " + strings.Repeat("-", barW+12)) + "\n")
+		Render("  "+strings.Repeat("-", barW+12)) + "\n")
 
 	if m.hardware.CPU.Model == nil {
 		b.WriteString("  CPU info not available.\n")
@@ -157,7 +157,7 @@ func (m *Model) renderMemorySection() string {
 		Render("  Memory") + "\n")
 	b.WriteString(lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorBorder)).
-		Render("  " + strings.Repeat("-", barW+12)) + "\n")
+		Render("  "+strings.Repeat("-", barW+12)) + "\n")
 
 	totalMB := m.hardware.Memory.CapacityBytes >> 20
 
@@ -232,7 +232,7 @@ func (m *Model) renderGPUSection() string {
 		Render("  Accelerators") + "\n")
 	b.WriteString(lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorBorder)).
-		Render("  " + strings.Repeat("-", 40)) + "\n")
+		Render("  "+strings.Repeat("-", 40)) + "\n")
 
 	if len(m.hardware.Accelerators) == 0 {
 		b.WriteString("  No accelerators detected.\n")
@@ -282,7 +282,7 @@ func (m *Model) renderLivePerf() string {
 		Render("  Live GPU Performance") + "\n")
 	b.WriteString(lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorBorder)).
-		Render("  " + strings.Repeat("-", barW+12)) + "\n")
+		Render("  "+strings.Repeat("-", barW+12)) + "\n")
 
 	if len(m.gpuStats) == 0 {
 		b.WriteString("  Waiting for GPU performance data...\n")
