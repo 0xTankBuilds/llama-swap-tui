@@ -24,3 +24,20 @@ jobs:
         # -v so the log lists every test by name (without it, `go test`
         # only prints one summary line per package).
         run: go test -v ./...
+
+  smoke:
+    # Boot the real binary against the mock llama-swap server and prove it
+    # renders, stays connected, switches tabs, and quits cleanly. Runs in
+    # parallel with the test job; see scripts/smoke-test.sh.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install tmux
+        # The TUI needs a real TTY; install explicitly rather than relying
+        # on the runner image shipping tmux.
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq tmux
+      - name: Smoke test
+        run: bash scripts/smoke-test.sh
