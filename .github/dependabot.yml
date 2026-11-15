@@ -1,0 +1,27 @@
+# Dependabot version updates: Go modules and GitHub Actions, checked weekly
+# on Mondays. PRs land at the start of the week so they can be reviewed and
+# merged in time for Sunday's auto-tag release. The commit prefix keeps
+# Dependabot PR titles in the repo's Conventional Commits style, so the
+# auto-tagger classifies them as patch bumps. The golangci-lint version is
+# an action input, not an action version, so Dependabot does not bump it;
+# that stays pinned in ci.yml.
+version: 2
+updates:
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore"
+      include: "scope"
