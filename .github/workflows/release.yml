@@ -28,4 +28,8 @@ jobs:
           version: v2.20.2
           args: release --clean
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The release must be created with RELEASE_PAT, not the built-in
+          # GITHUB_TOKEN: releases created by GITHUB_TOKEN do not trigger
+          # other workflows, so smoke-release.yml (on release: published)
+          # never ran for v1.0.0 or v1.0.1. A PAT-created release fires it.
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
