@@ -3,6 +3,7 @@ package tui
 import (
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -167,6 +168,50 @@ func TestActivitySelectionKeepsRowVisible(t *testing.T) {
 		rowLine := m.activityTableStartLine() + m.activitySelected
 		if rowLine < m.vp.YOffset || rowLine >= m.vp.YOffset+m.vp.Height {
 			t.Fatalf("selected row %d at line %d not visible (YOffset %d, height %d)",
+				m.activitySelected, rowLine, m.vp.YOffset, m.vp.Height)
+		}
+	}
+	for i := 0; i < 9; i++ {
+		m.pressKey(t, runeKey('j'))
+		checkVisible()
+	}
+	for i := 0; i < 9; i++ {
+		m.pressKey(t, runeKey('k'))
+		checkVisible()
+	}
+}
+
+// TestActivitySelectionVisibleWithStats is the statistics-present
+// counterpart of TestActivitySelectionKeepsRowVisible. It locates the
+// selected row in the rendered content by its request path instead of
+// trusting activityTableStartLine: the helper under test must not be
+// the thing proving its own arithmetic.
+func TestActivitySelectionVisibleWithStats(t *testing.T) {
+	m := newDetailTestModel(nil)
+	m.activityStats = &api.ActivityStats{TotalRequests: 10, TotalInputTokens: 100, TotalOutputTokens: 200, TotalCacheTokens: 50}
+	rows := make([]api.ActivityLogEntry, 10)
+	for i := range rows {
+		rows[i] = api.ActivityLogEntry{ID: i + 1, Timestamp: time.Now(), Model: "m", ReqPath: fmt.Sprintf("/row-%02d", i+1), RespStatusCode: 200}
+	}
+	m.activityPage.Data = rows
+	m.vp.Height = 5
+	m.vp.SetContent(m.renderActivityView())
+	checkVisible := func() {
+		t.Helper()
+		marker := fmt.Sprintf("/row-%02d", m.activitySelected+1)
+		lines := strings.Split(m.renderActivityView(), "\n")
+		rowLine := -1
+		for i, line := range lines {
+			if strings.Contains(line, marker) {
+				rowLine = i
+				break
+			}
+		}
+		if rowLine < 0 {
+			t.Fatalf("selected row %d (%s) not found in rendered view", m.activitySelected, marker)
+		}
+		if rowLine < m.vp.YOffset || rowLine >= m.vp.YOffset+m.vp.Height {
+			t.Fatalf("selected row %d at rendered line %d not visible (YOffset %d, height %d)",
 				m.activitySelected, rowLine, m.vp.YOffset, m.vp.Height)
 		}
 	}

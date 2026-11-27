@@ -425,7 +425,7 @@ func (m *Model) activityTableStartLine() int {
 		lines += len(m.inflight) + 2
 	}
 	if m.activityStats != nil {
-		lines += 2
+		lines++
 	}
 	return lines
 }
