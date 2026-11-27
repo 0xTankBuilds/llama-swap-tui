@@ -24,8 +24,15 @@ func (m *Model) renderActivityView() string {
 
 	// Render body and apply horizontal scroll. The header is sticky above
 	// the viewport but shares the same offset so columns stay aligned.
+	// Only the table scrolls: the capture detail panel is appended
+	// unscrolled (clipped to the viewport width) so h-scrolling never
+	// clips its leading columns.
 	raw := m.renderActivityBody()
-	return hScrollLines(raw, m.activityOffset(), m.vp.Width)
+	view := hScrollLines(raw, m.activityOffset(), m.vp.Width)
+	if m.detail != nil {
+		view += hScrollLines(m.renderActivityDetail(), 0, m.vp.Width)
+	}
+	return view
 }
 
 func (m *Model) renderActivityBody() string {
@@ -104,7 +111,7 @@ func (m *Model) renderActivityBody() string {
 		for i := 0; i < len(m.activityPage.Data); i++ {
 			entry := m.activityPage.Data[i]
 			line := m.renderActivityRow(entry, i)
-			if i == m.selected {
+			if i == m.activitySelected {
 				line = lipgloss.NewStyle().
 					Bold(true).
 					Background(lipgloss.Color(colorHighlight)).
@@ -118,7 +125,7 @@ func (m *Model) renderActivityBody() string {
 	if m.totalPages > 1 {
 		pager := lipgloss.NewStyle().
 			Foreground(lipgloss.Color(colorTextSecondary)).
-			Render(fmt.Sprintf("  Page %d/%d  (j/k: scroll, /: filter, ←/→: h-scroll)", m.pageNum, m.totalPages))
+			Render(fmt.Sprintf("  Page %d/%d  (j/k: select row, enter: details, ←/→: h-scroll)", m.pageNum, m.totalPages))
 		b.WriteString(pager)
 	}
 
@@ -309,7 +316,8 @@ func (m *Model) renderActivityRow(entry api.ActivityLogEntry, idx int) string {
 func (m *Model) activityNextPage() tea.Cmd {
 	if m.pageNum < m.totalPages {
 		m.pageNum++
-		m.selected = 0
+		m.activitySelected = 0
+		m.closeActivityDetail()
 		m.hScrollOffset = 0
 		return m.fetchActivity()
 	}
@@ -319,11 +327,237 @@ func (m *Model) activityNextPage() tea.Cmd {
 func (m *Model) activityPrevPage() tea.Cmd {
 	if m.pageNum > 1 {
 		m.pageNum--
-		m.selected = 0
+		m.activitySelected = 0
+		m.closeActivityDetail()
 		m.hScrollOffset = 0
 		return m.fetchActivity()
 	}
 	return nil
+}
+
+// ---------------------------------------------------------------------------
+// Capture detail (issue #26)
+// ---------------------------------------------------------------------------
+
+// activityDetail is the expanded capture view for one activity row. It is
+// keyed by entry ID, not row index, so a page refresh that moves the row
+// keeps the detail on the same request.
+type activityDetail struct {
+	entryID   int
+	captureID string
+	model     string
+	time      string // HH:MM:SS, as shown in the table
+	// generation identifies this open of the row: closing and reopening
+	// the same row starts a new fetch with the same entry and capture
+	// IDs, so results are matched to the open that requested them.
+	generation int
+	loading    bool
+	noCapture  bool
+	pruned     bool
+	err        string
+	prompts    captureDetail
+}
+
+// closeActivityDetail closes the expanded capture panel, if open.
+func (m *Model) closeActivityDetail() {
+	m.detail = nil
+}
+
+// toggleActivityDetail opens the expanded capture panel for the
+// selected activity row, or closes it if it is already open for that
+// row. Rows without a capture show a note instead of fetching.
+func (m *Model) toggleActivityDetail() tea.Cmd {
+	if len(m.activityPage.Data) == 0 || m.activitySelected < 0 || m.activitySelected >= len(m.activityPage.Data) {
+		return nil
+	}
+	entry := m.activityPage.Data[m.activitySelected]
+	if m.detail != nil && m.detail.entryID == entry.ID {
+		m.detail = nil
+		return nil
+	}
+	d := &activityDetail{
+		entryID:   entry.ID,
+		captureID: entry.CaptureID,
+		model:     entry.Model,
+		time:      entry.Timestamp.Local().Format("15:04:05"),
+	}
+	m.detail = d
+	if !entry.HasCapture || entry.CaptureID == "" {
+		d.noCapture = true
+		return nil
+	}
+	d.loading = true
+	m.captureGen++
+	d.generation = m.captureGen
+	return m.fetchCapture(entry, d.generation)
+}
+
+// activitySelectDown moves the activity row selection down one row,
+// closing the detail: the detail belongs to the previously selected row.
+func (m *Model) activitySelectDown() {
+	m.closeActivityDetail()
+	m.clampActivitySelected()
+	if m.activitySelected < len(m.activityPage.Data)-1 {
+		m.activitySelected++
+	}
+	m.ensureActivitySelectedVisible()
+}
+
+// activitySelectUp moves the activity row selection up one row,
+// closing the detail: the detail belongs to the previously selected row.
+func (m *Model) activitySelectUp() {
+	m.closeActivityDetail()
+	m.clampActivitySelected()
+	if m.activitySelected > 0 {
+		m.activitySelected--
+	}
+	m.ensureActivitySelectedVisible()
+}
+
+// activityTableStartLine is the viewport line index of the first table
+// row: the sections rendered above the table in renderActivityBody.
+func (m *Model) activityTableStartLine() int {
+	lines := 0
+	if len(m.models) > 0 || m.conn != connDisconnected {
+		lines++
+	}
+	if len(m.inflight) > 0 {
+		lines += len(m.inflight) + 2
+	}
+	if m.activityStats != nil {
+		lines++
+	}
+	return lines
+}
+
+// ensureActivitySelectedVisible scrolls the viewport just enough to
+// keep the selected row on screen after a selection move.
+func (m *Model) ensureActivitySelectedVisible() {
+	if len(m.activityPage.Data) == 0 || m.vp.Height <= 0 {
+		return
+	}
+	rowLine := m.activityTableStartLine() + m.activitySelected
+	if rowLine < m.vp.YOffset {
+		m.vp.SetYOffset(rowLine)
+	} else if rowLine >= m.vp.YOffset+m.vp.Height {
+		m.vp.SetYOffset(rowLine - m.vp.Height + 1)
+	}
+}
+
+// clampActivitySelected keeps the activity row selection inside the
+// current page. The Models tab shares m.selected for its own list, so
+// the Activity tab keeps a separate index.
+func (m *Model) clampActivitySelected() {
+	if len(m.activityPage.Data) == 0 {
+		m.activitySelected = 0
+	} else if m.activitySelected >= len(m.activityPage.Data) {
+		m.activitySelected = len(m.activityPage.Data) - 1
+	} else if m.activitySelected < 0 {
+		m.activitySelected = 0
+	}
+}
+
+// syncDetailWithPage keeps the open detail on the same request after the
+// activity page is replaced: the row may have moved, or dropped off the
+// page entirely (then the detail closes).
+func (m *Model) syncDetailWithPage() {
+	if m.detail == nil {
+		return
+	}
+	for i, entry := range m.activityPage.Data {
+		if entry.ID == m.detail.entryID {
+			m.activitySelected = i
+			return
+		}
+	}
+	m.detail = nil
+}
+
+// renderActivityDetail renders the expanded capture panel for the
+// selected activity row: input prompt and output, wrapped to the
+// viewport width so long prompts stay readable without h-scrolling.
+func (m *Model) renderActivityDetail() string {
+	d := m.detail
+	var b strings.Builder
+	header := fmt.Sprintf("  ── Request #%d · %s · %s ──", d.entryID, d.model, d.time)
+	b.WriteString(lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color(colorAccentMuted)).
+		Render(header))
+	b.WriteString("\n")
+	switch {
+	case d.noCapture:
+		b.WriteString("  No capture available for this request.\n")
+	case d.loading:
+		b.WriteString(lipgloss.NewStyle().
+			Foreground(lipgloss.Color(colorLoading)).
+			Render("  Loading capture…"))
+		b.WriteString("\n")
+	case d.pruned:
+		b.WriteString("  This capture is no longer available (it was pruned).\n")
+	case d.err != "":
+		b.WriteString(lipgloss.NewStyle().
+			Foreground(lipgloss.Color(colorStatusError)).
+			Render("  Could not load capture: " + d.err))
+		b.WriteString("\n")
+	default:
+		writeDetailSection(&b, "Input prompt", d.prompts.input, m.detailWidth())
+		if d.prompts.reasoning != "" {
+			writeDetailSection(&b, "Reasoning", d.prompts.reasoning, m.detailWidth())
+		}
+		writeDetailSection(&b, "Output", d.prompts.output, m.detailWidth())
+	}
+	b.WriteString(lipgloss.NewStyle().
+		Foreground(lipgloss.Color(colorTextTertiary)).
+		Render("  (esc to close)"))
+	b.WriteString("\n")
+	return b.String()
+}
+
+// stripControlChars removes C0 and C1 control bytes (and DEL) from s so
+// captured text can never smuggle terminal escape sequences into the
+// rendered view: a stored prompt could otherwise carry an OSC 52
+// sequence that rewrites the operator's clipboard. Newline and tab are
+// kept, wordWrap splits paragraphs on newlines and treats tabs as
+// whitespace.
+func stripControlChars(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\t' {
+			return r
+		}
+		if r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) {
+			return -1
+		}
+		return r
+	}, s)
+}
+
+// writeDetailSection renders one labelled, wrapped block of the detail
+// panel. Empty text reads "(empty)" rather than vanishing.
+func writeDetailSection(b *strings.Builder, label, text string, width int) {
+	b.WriteString(lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color(colorAccentMuted)).
+		Render("  " + label + ":"))
+	b.WriteString("\n")
+	if strings.TrimSpace(text) == "" {
+		b.WriteString("    (empty)\n\n")
+		return
+	}
+	for _, line := range wordWrap(stripControlChars(text), width) {
+		b.WriteString("    " + line + "\n")
+	}
+	b.WriteString("\n")
+}
+
+// detailWidth is the text width for wrapped detail lines: the viewport
+// width less the 4-space indent and a small margin.
+func (m *Model) detailWidth() int {
+	w := m.vp.Width - 6
+	if w < 10 {
+		w = 10
+	}
+	return w
 }
 
 // ---------------------------------------------------------------------------

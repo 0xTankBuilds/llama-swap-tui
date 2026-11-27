@@ -210,6 +210,18 @@ func NewClient(baseURL string, header http.Header) *Client {
 	}
 }
 
+// HTTPError is a non-200 response from the API. Callers use errors.As
+// to distinguish statuses: a pruned capture is a 404, not a failure
+// worth surfacing as a connection error.
+type HTTPError struct {
+	Path       string
+	StatusCode int
+}
+
+func (e *HTTPError) Error() string {
+	return fmt.Sprintf("GET %s: HTTP %d", e.Path, e.StatusCode)
+}
+
 // doJSON performs a GET request and decodes the JSON response into v.
 func (c *Client) doJSON(ctx context.Context, path string, v interface{}) error {
 	url := c.BaseURL + path
@@ -230,7 +242,7 @@ func (c *Client) doJSON(ctx context.Context, path string, v interface{}) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("GET %s: HTTP %d", path, resp.StatusCode)
+		return &HTTPError{Path: path, StatusCode: resp.StatusCode}
 	}
 
 	if v != nil {
@@ -571,10 +583,13 @@ func (c *Client) LoadModel(ctx context.Context, model string) error {
 	return nil
 }
 
-// GetCapture fetches a request/response capture by ID.
-func (c *Client) GetCapture(ctx context.Context, id int) (*ReqRespCapture, error) {
+// GetCapture fetches a request/response capture by its capture ID: the
+// string capture_id from the activity row, not the row's numeric ID.
+// The server validates the ID shape (yymmddhh-XXXX) and rejects a
+// numeric row ID with a 400; a pruned capture is a 404 (*HTTPError).
+func (c *Client) GetCapture(ctx context.Context, id string) (*ReqRespCapture, error) {
 	var result ReqRespCapture
-	if err := c.doJSON(ctx, fmt.Sprintf("/api/captures/%d", id), &result); err != nil {
+	if err := c.doJSON(ctx, fmt.Sprintf("/api/captures/%s", id), &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
