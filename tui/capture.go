@@ -8,6 +8,7 @@ import (
 	"llama-swap-tui/api"
 
 	"github.com/charmbracelet/x/ansi"
+	"github.com/rivo/uniseg"
 )
 
 // captureDetail is the parsed input prompt and output text of a
@@ -90,7 +91,14 @@ func parseInputPrompt(reqBody string) string {
 func parseOutput(c api.ReqRespCapture) (output, reasoning string) {
 	body := decodeBody(c.RespBody)
 	if isSSE(c.RespHeaders) {
-		return parseSSEChat(body)
+		content, reasoning := parseSSEChat(body)
+		if content == "" && reasoning == "" {
+			// Nothing recognisable was streamed (e.g. a shape the
+			// parser does not know): show the raw body rather than
+			// an empty output.
+			return prettyOrRaw(body), ""
+		}
+		return content, reasoning
 	}
 	var resp struct {
 		Choices []struct {
@@ -113,9 +121,10 @@ func parseOutput(c api.ReqRespCapture) (output, reasoning string) {
 	return prettyOrRaw(body), ""
 }
 
-// parseSSEChat reassembles streamed chat output: each "data: {...}" line
-// carries choices[0].delta.content (and reasoning_content), "[DONE]"
-// ends the stream. Unparseable lines are skipped, like the web UI.
+// parseSSEChat reassembles streamed output: each "data: {...}" line
+// carries choices[0].delta.content (and reasoning_content) for chat
+// completions, or choices[0].text for completions. "[DONE]" ends the
+// stream. Unparseable lines are skipped, like the web UI.
 func parseSSEChat(body string) (content, reasoning string) {
 	for _, line := range strings.Split(body, "\n") {
 		line = strings.TrimSpace(line)
@@ -133,13 +142,14 @@ func parseSSEChat(body string) (content, reasoning string) {
 					ReasoningContent string `json:"reasoning_content"`
 					Reasoning        string `json:"reasoning"`
 				} `json:"delta"`
+				Text string `json:"text"`
 			} `json:"choices"`
 		}
 		if err := json.Unmarshal([]byte(data), &chunk); err != nil || len(chunk.Choices) == 0 {
 			continue
 		}
 		d := chunk.Choices[0].Delta
-		content += d.Content
+		content += d.Content + chunk.Choices[0].Text
 		reasoning += d.ReasoningContent + d.Reasoning
 	}
 	return content, reasoning
@@ -271,7 +281,11 @@ func wrapLine(line string, width int) []string {
 	return append(lines, cur)
 }
 
-// splitWord hard-splits w into chunks of at most maxW display width.
+// splitWord hard-splits w into chunks of at most maxW display width,
+// splitting at grapheme boundaries. A single grapheme wider than maxW
+// is emitted on its own line, overflowing the budget, so every
+// iteration consumes at least one grapheme: the split always
+// terminates and nothing is ever silently truncated.
 func splitWord(w string, maxW int) []string {
 	if maxW < 1 {
 		maxW = 1
@@ -280,14 +294,25 @@ func splitWord(w string, maxW int) []string {
 		return []string{w}
 	}
 	var chunks []string
-	rest := w
-	for ansi.StringWidth(rest) > maxW {
-		chunk := ansi.Cut(rest, 0, maxW)
-		chunks = append(chunks, chunk)
-		rest = ansi.Cut(rest, maxW, ansi.StringWidth(rest))
+	var cur strings.Builder
+	curW := 0
+	flush := func() {
+		if cur.Len() > 0 {
+			chunks = append(chunks, cur.String())
+			cur.Reset()
+			curW = 0
+		}
 	}
-	if rest != "" {
-		chunks = append(chunks, rest)
+	g := uniseg.NewGraphemes(w)
+	for g.Next() {
+		cluster := g.Str()
+		cw := g.Width()
+		if curW > 0 && curW+cw > maxW {
+			flush()
+		}
+		cur.WriteString(cluster)
+		curW += cw
 	}
+	flush()
 	return chunks
 }

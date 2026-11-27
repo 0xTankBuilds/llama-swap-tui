@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"strings"
 	"testing"
+	"time"
 
 	"llama-swap-tui/api"
 )
@@ -71,6 +72,33 @@ func TestParseCaptureSSEReassembly(t *testing.T) {
 	d := parseCapture(cap)
 	if d.output != "Hello world" {
 		t.Errorf("output = %q, want %q", d.output, "Hello world")
+	}
+}
+
+func TestParseCaptureSSECompletionsText(t *testing.T) {
+	sse := "data: {\"choices\":[{\"text\":\"hello\"}]}\n" +
+		"data: {\"choices\":[{\"text\":\" world\"}]}\n" +
+		"data: [DONE]\n"
+	cap := api.ReqRespCapture{
+		RespHeaders: map[string]string{"Content-Type": "text/event-stream"},
+		RespBody:    b64(sse),
+	}
+	d := parseCapture(cap)
+	if d.output != "hello world" {
+		t.Errorf("output = %q, want %q", d.output, "hello world")
+	}
+}
+
+func TestParseCaptureSSEUnrecognizedFallback(t *testing.T) {
+	sse := "data: {\"foo\":\"bar\"}\n" +
+		"data: [DONE]\n"
+	cap := api.ReqRespCapture{
+		RespHeaders: map[string]string{"Content-Type": "text/event-stream"},
+		RespBody:    b64(sse),
+	}
+	d := parseCapture(cap)
+	if !strings.Contains(d.output, `"foo"`) {
+		t.Errorf("output = %q, want the raw SSE body", d.output)
 	}
 }
 
@@ -170,6 +198,24 @@ func TestWordWrap(t *testing.T) {
 			width: 10,
 			want:  []string{"supercalif", "ragilistic"},
 		},
+		{
+			name:  "wide grapheme on a one-cell budget",
+			in:    "         界",
+			width: 10,
+			want:  []string{"         界"},
+		},
+		{
+			name:  "wide grapheme splits at grapheme boundary",
+			in:    "ab界cd",
+			width: 3,
+			want:  []string{"ab", "界c", "d"},
+		},
+		{
+			name:  "ZWJ emoji stays one grapheme",
+			in:    "a👨‍👩‍👧b",
+			width: 2,
+			want:  []string{"a", "👨‍👩‍👧", "b"},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -183,5 +229,23 @@ func TestWordWrap(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestWordWrapWideGraphemeTerminates is the regression test for the
+// splitWord infinite loop: a two-cell grapheme on a one-cell budget
+// used to hang because ansi.Cut returned "" and the remainder never
+// shrank. The timeout turns a future regression into a failure
+// instead of hanging the suite.
+func TestWordWrapWideGraphemeTerminates(t *testing.T) {
+	done := make(chan []string, 1)
+	go func() { done <- wordWrap("         界", 10) }()
+	select {
+	case got := <-done:
+		if len(got) != 1 || got[0] != "         界" {
+			t.Errorf("wordWrap(%q, 10) = %q, want the line unchanged (overflow, never truncated)", "         界", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("wordWrap hung on a wide grapheme with a one-cell budget")
 	}
 }

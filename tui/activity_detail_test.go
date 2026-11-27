@@ -2,6 +2,7 @@ package tui
 
 import (
 	"encoding/base64"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -62,7 +63,157 @@ func (m *Model) pressKey(t *testing.T, msg tea.KeyMsg) tea.Cmd {
 }
 
 func enterKey() tea.KeyMsg { return tea.KeyMsg(tea.Key{Type: tea.KeyEnter}) }
-func escKey() tea.KeyMsg   { return tea.KeyMsg(tea.Key{Type: tea.KeyEsc}) }
+func ctrlJKey() tea.KeyMsg { return tea.KeyMsg(tea.Key{Type: tea.KeyCtrlJ}) }
+func ctrlKKey() tea.KeyMsg { return tea.KeyMsg(tea.Key{Type: tea.KeyCtrlK}) }
+
+func TestStripControlChars(t *testing.T) {
+	in := "a\x1b]52;c;SGVsbG8=\x07b\x00c\x7fd\u009be\tf\ng"
+	want := "a]52;c;SGVsbG8=bcde\tf\ng"
+	if got := stripControlChars(in); got != want {
+		t.Errorf("stripControlChars(%q) = %q, want %q", in, got, want)
+	}
+}
+
+func TestActivityDetailStripsControlSequences(t *testing.T) {
+	m := newDetailTestModel(nil)
+	m.detail = &activityDetail{
+		entryID: 1, model: "smoke-gemma", time: "12:00:00",
+		prompts: captureDetail{
+			input:  "hello\x1b]52;c;SGVsbG8=\x07world",
+			output: "plain",
+		},
+	}
+	view := m.renderActivityView()
+	// The OSC 52 sequence must be defused: no ESC introducing it and
+	// no BEL terminating it. (Lipgloss styling emits its own ESC
+	// sequences, so the check is on the OSC introducer, not ESC alone.)
+	if strings.Contains(view, "\x1b]52;") || strings.Contains(view, "\x07") {
+		t.Errorf("control sequence reached the rendered view:\n%q", view)
+	}
+	if !strings.Contains(view, "hello") || !strings.Contains(view, "world") {
+		t.Errorf("captured text lost after sanitising:\n%s", view)
+	}
+}
+
+func TestCaptureFetchedMsgStaleGeneration(t *testing.T) {
+	_, client := detailTestServer(t)
+	m := newDetailTestModel(client)
+	openDetail(t, m)
+	if m.detail.prompts.output != "smoke test reply" {
+		t.Fatalf("output = %q, want loaded detail", m.detail.prompts.output)
+	}
+
+	// A result from an earlier open of the same row: same entry and
+	// capture IDs, older generation. It must be ignored.
+	stale := CaptureFetchedMsg{
+		entryID:    m.detail.entryID,
+		captureID:  m.detail.captureID,
+		generation: m.detail.generation - 1,
+		err:        errors.New("stale boom"),
+	}
+	next, _ := m.Update(stale)
+	m = next.(*Model)
+	if m.detail.err != "" {
+		t.Errorf("stale result applied: err = %q", m.detail.err)
+	}
+	if m.detail.prompts.output != "smoke test reply" {
+		t.Errorf("stale result clobbered prompts: output = %q", m.detail.prompts.output)
+	}
+
+	// The current generation is still accepted.
+	current := CaptureFetchedMsg{
+		entryID:    m.detail.entryID,
+		captureID:  m.detail.captureID,
+		generation: m.detail.generation,
+		err:        errors.New("current boom"),
+	}
+	next, _ = m.Update(current)
+	m = next.(*Model)
+	if m.detail.err != "current boom" {
+		t.Errorf("current-generation result ignored: err = %q", m.detail.err)
+	}
+}
+
+func TestActivityDetailUnscrolledByHScroll(t *testing.T) {
+	_, client := detailTestServer(t)
+	m := newDetailTestModel(client)
+	m.vp.Width = 40
+	// A long path makes the table wider than the viewport so the
+	// horizontal offset sticks.
+	m.activityPage.Data[0].ReqPath = "/v1/chat/completions/" + strings.Repeat("x", 100)
+	openDetail(t, m)
+
+	m.hScrollOffset = 10
+	view := m.renderActivityView()
+	if !strings.Contains(view, "── Request #1") {
+		t.Errorf("detail header clipped by h-scroll:\n%s", view)
+	}
+	if !strings.Contains(view, "smoke test prompt") {
+		t.Errorf("detail prompt clipped by h-scroll:\n%s", view)
+	}
+}
+
+func TestActivitySelectionKeepsRowVisible(t *testing.T) {
+	m := newDetailTestModel(nil)
+	rows := make([]api.ActivityLogEntry, 10)
+	for i := range rows {
+		rows[i] = api.ActivityLogEntry{ID: i + 1, Timestamp: time.Now(), Model: "m", RespStatusCode: 200}
+	}
+	m.activityPage.Data = rows
+	m.vp.Height = 5
+	m.vp.SetContent(m.renderActivityView())
+	checkVisible := func() {
+		t.Helper()
+		rowLine := m.activityTableStartLine() + m.activitySelected
+		if rowLine < m.vp.YOffset || rowLine >= m.vp.YOffset+m.vp.Height {
+			t.Fatalf("selected row %d at line %d not visible (YOffset %d, height %d)",
+				m.activitySelected, rowLine, m.vp.YOffset, m.vp.Height)
+		}
+	}
+	for i := 0; i < 9; i++ {
+		m.pressKey(t, runeKey('j'))
+		checkVisible()
+	}
+	for i := 0; i < 9; i++ {
+		m.pressKey(t, runeKey('k'))
+		checkVisible()
+	}
+}
+
+func TestActivityDetailKeyboardScroll(t *testing.T) {
+	_, client := detailTestServer(t)
+	m := newDetailTestModel(client)
+	openDetail(t, m)
+	m.vp.Height = 5
+	m.vp.SetContent(m.renderActivityView())
+	if m.vp.YOffset != 0 {
+		t.Fatalf("YOffset = %d, want 0 before scrolling", m.vp.YOffset)
+	}
+
+	m.pressKey(t, ctrlJKey())
+	if m.vp.YOffset != 1 {
+		t.Errorf("ctrl+j: YOffset = %d, want 1", m.vp.YOffset)
+	}
+	if m.detail == nil {
+		t.Error("ctrl+j closed the detail, want it open")
+	}
+	m.pressKey(t, ctrlKKey())
+	if m.vp.YOffset != 0 {
+		t.Errorf("ctrl+k: YOffset = %d, want 0", m.vp.YOffset)
+	}
+
+	// With the detail closed, ctrl+j/ctrl+k do nothing.
+	m.pressKey(t, escKey())
+	m.pressKey(t, ctrlJKey())
+	if m.vp.YOffset != 0 {
+		t.Errorf("ctrl+j with detail closed: YOffset = %d, want 0", m.vp.YOffset)
+	}
+
+	if !strings.Contains(m.renderHelpOverlay(), "ctrl+j/k") {
+		t.Error("help overlay does not document the detail scroll keys")
+	}
+}
+func escKey() tea.KeyMsg { return tea.KeyMsg(tea.Key{Type: tea.KeyEsc}) }
 func runeKey(r rune) tea.KeyMsg {
 	return tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune{r}})
 }

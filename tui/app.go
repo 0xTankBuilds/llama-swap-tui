@@ -135,10 +135,11 @@ type ActivityPageFetchedMsg struct {
 // update loop. The Cmd goroutine never touches Model state; Update
 // applies the result only if the detail is still open for that row.
 type CaptureFetchedMsg struct {
-	entryID   int
-	captureID string
-	capture   *api.ReqRespCapture
-	err       error
+	entryID    int
+	captureID  string
+	generation int
+	capture    *api.ReqRespCapture
+	err        error
 }
 
 type HardwareFetchedMsg struct {
@@ -210,6 +211,9 @@ type Model struct {
 	// detail is the expanded capture panel for the selected activity
 	// row (issue #26); nil when closed.
 	detail *activityDetail
+	// captureGen counts capture fetches started, so each open of a row
+	// gets a distinct generation (see activityDetail.generation).
+	captureGen int
 
 	// Models
 	inflight           []api.InflightRequestEntry
@@ -393,7 +397,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case CaptureFetchedMsg:
 		// Ignore stale fetches: the detail may have been closed, or the
 		// user may have opened another row while this one was in flight.
-		if m.detail == nil || msg.entryID != m.detail.entryID || msg.captureID != m.detail.captureID {
+		// The generation check also rejects results from an earlier
+		// open of the same row, which shares entry and capture IDs.
+		if m.detail == nil || msg.generation != m.detail.generation || msg.entryID != m.detail.entryID || msg.captureID != m.detail.captureID {
 			return m, nil
 		}
 		m.detail.loading = false
@@ -671,14 +677,15 @@ func (m *Model) fetchActivityPage() tea.Cmd {
 
 // fetchCapture fetches a request/response capture for the detail panel.
 // The entry and capture ID are captured on the UI goroutine so the Cmd
-// closure reads no shared state.
-func (m *Model) fetchCapture(entry api.ActivityLogEntry) tea.Cmd {
+// closure reads no shared state. generation is the open that requested
+// the fetch, so Update can ignore results from an earlier open.
+func (m *Model) fetchCapture(entry api.ActivityLogEntry, generation int) tea.Cmd {
 	entryID, captureID := entry.ID, entry.CaptureID
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		cap, err := m.client.GetCapture(ctx, captureID)
-		return CaptureFetchedMsg{entryID: entryID, captureID: captureID, capture: cap, err: err}
+		return CaptureFetchedMsg{entryID: entryID, captureID: captureID, generation: generation, capture: cap, err: err}
 	}
 }
 
@@ -1103,6 +1110,17 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case tabProfiles:
 			m.profileScrollUp()
 		}
+	case "ctrl+j":
+		// Scroll the open capture detail down. j/k move the selection
+		// and close the panel, and pgup/pgdown change the page, so the
+		// detail gets its own binding.
+		if m.tab == tabActivity && m.detail != nil {
+			m.vp.ScrollDown(1)
+		}
+	case "ctrl+k":
+		if m.tab == tabActivity && m.detail != nil {
+			m.vp.ScrollUp(1)
+		}
 	case "esc":
 		if m.detail != nil {
 			m.closeActivityDetail()
@@ -1309,7 +1327,8 @@ func (m *Model) renderHelpOverlay() string {
 				"  r                Refresh current tab\n" +
 				"  1-5              Switch tabs\n" +
 				"  tab / shift+tab  Next / prev tab\n\n" +
-				"  Activity (2):  j/k select row  enter=details  pgup/pgdown pages\n" +
+				"  Activity (2):  j/k select row  enter=details  ctrl+j/k scroll details\n" +
+				"                  pgup/pgdown pages  ←/→ h-scroll\n" +
 				"  Models (3):    j/k navigate  l=load  L=name  u=unload  x=cancel\n" +
 				"                  pgup/pgdown scroll activity rows\n" +
 				"  Hardware (4):  j/k scroll  pgup/pgdown pages  r refresh\n" +

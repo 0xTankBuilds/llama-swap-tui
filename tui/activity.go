@@ -24,8 +24,15 @@ func (m *Model) renderActivityView() string {
 
 	// Render body and apply horizontal scroll. The header is sticky above
 	// the viewport but shares the same offset so columns stay aligned.
+	// Only the table scrolls: the capture detail panel is appended
+	// unscrolled (clipped to the viewport width) so h-scrolling never
+	// clips its leading columns.
 	raw := m.renderActivityBody()
-	return hScrollLines(raw, m.activityOffset(), m.vp.Width)
+	view := hScrollLines(raw, m.activityOffset(), m.vp.Width)
+	if m.detail != nil {
+		view += hScrollLines(m.renderActivityDetail(), 0, m.vp.Width)
+	}
+	return view
 }
 
 func (m *Model) renderActivityBody() string {
@@ -112,11 +119,6 @@ func (m *Model) renderActivityBody() string {
 			}
 			b.WriteString(line + "\n")
 		}
-	}
-
-	// Expanded capture detail for the selected row (Enter toggles).
-	if m.detail != nil {
-		b.WriteString(m.renderActivityDetail())
 	}
 
 	// Pagination footer
@@ -345,11 +347,15 @@ type activityDetail struct {
 	captureID string
 	model     string
 	time      string // HH:MM:SS, as shown in the table
-	loading   bool
-	noCapture bool
-	pruned    bool
-	err       string
-	prompts   captureDetail
+	// generation identifies this open of the row: closing and reopening
+	// the same row starts a new fetch with the same entry and capture
+	// IDs, so results are matched to the open that requested them.
+	generation int
+	loading    bool
+	noCapture  bool
+	pruned     bool
+	err        string
+	prompts    captureDetail
 }
 
 // closeActivityDetail closes the expanded capture panel, if open.
@@ -381,7 +387,9 @@ func (m *Model) toggleActivityDetail() tea.Cmd {
 		return nil
 	}
 	d.loading = true
-	return m.fetchCapture(entry)
+	m.captureGen++
+	d.generation = m.captureGen
+	return m.fetchCapture(entry, d.generation)
 }
 
 // activitySelectDown moves the activity row selection down one row,
@@ -392,6 +400,7 @@ func (m *Model) activitySelectDown() {
 	if m.activitySelected < len(m.activityPage.Data)-1 {
 		m.activitySelected++
 	}
+	m.ensureActivitySelectedVisible()
 }
 
 // activitySelectUp moves the activity row selection up one row,
@@ -401,6 +410,37 @@ func (m *Model) activitySelectUp() {
 	m.clampActivitySelected()
 	if m.activitySelected > 0 {
 		m.activitySelected--
+	}
+	m.ensureActivitySelectedVisible()
+}
+
+// activityTableStartLine is the viewport line index of the first table
+// row: the sections rendered above the table in renderActivityBody.
+func (m *Model) activityTableStartLine() int {
+	lines := 0
+	if len(m.models) > 0 || m.conn != connDisconnected {
+		lines++
+	}
+	if len(m.inflight) > 0 {
+		lines += len(m.inflight) + 2
+	}
+	if m.activityStats != nil {
+		lines += 2
+	}
+	return lines
+}
+
+// ensureActivitySelectedVisible scrolls the viewport just enough to
+// keep the selected row on screen after a selection move.
+func (m *Model) ensureActivitySelectedVisible() {
+	if len(m.activityPage.Data) == 0 || m.vp.Height <= 0 {
+		return
+	}
+	rowLine := m.activityTableStartLine() + m.activitySelected
+	if rowLine < m.vp.YOffset {
+		m.vp.SetYOffset(rowLine)
+	} else if rowLine >= m.vp.YOffset+m.vp.Height {
+		m.vp.SetYOffset(rowLine - m.vp.Height + 1)
 	}
 }
 
@@ -474,6 +514,24 @@ func (m *Model) renderActivityDetail() string {
 	return b.String()
 }
 
+// stripControlChars removes C0 and C1 control bytes (and DEL) from s so
+// captured text can never smuggle terminal escape sequences into the
+// rendered view: a stored prompt could otherwise carry an OSC 52
+// sequence that rewrites the operator's clipboard. Newline and tab are
+// kept, wordWrap splits paragraphs on newlines and treats tabs as
+// whitespace.
+func stripControlChars(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\t' {
+			return r
+		}
+		if r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) {
+			return -1
+		}
+		return r
+	}, s)
+}
+
 // writeDetailSection renders one labelled, wrapped block of the detail
 // panel. Empty text reads "(empty)" rather than vanishing.
 func writeDetailSection(b *strings.Builder, label, text string, width int) {
@@ -486,7 +544,7 @@ func writeDetailSection(b *strings.Builder, label, text string, width int) {
 		b.WriteString("    (empty)\n\n")
 		return
 	}
-	for _, line := range wordWrap(text, width) {
+	for _, line := range wordWrap(stripControlChars(text), width) {
 		b.WriteString("    " + line + "\n")
 	}
 	b.WriteString("\n")
