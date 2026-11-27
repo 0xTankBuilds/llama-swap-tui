@@ -4,7 +4,9 @@ package tui
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -129,6 +131,16 @@ type ActivityPageFetchedMsg struct {
 	page api.ActivityPage
 }
 
+// CaptureFetchedMsg carries a fetched capture (or its error) into the
+// update loop. The Cmd goroutine never touches Model state; Update
+// applies the result only if the detail is still open for that row.
+type CaptureFetchedMsg struct {
+	entryID   int
+	captureID string
+	capture   *api.ReqRespCapture
+	err       error
+}
+
 type HardwareFetchedMsg struct {
 	hw api.HardwareSnapshot
 }
@@ -191,6 +203,13 @@ type Model struct {
 	selected      int
 	pageNum       int
 	totalPages    int
+	// activitySelected is the row selection on the Activity tab. The
+	// Models tab uses m.selected for its own list, so the two tabs
+	// keep separate indices.
+	activitySelected int
+	// detail is the expanded capture panel for the selected activity
+	// row (issue #26); nil when closed.
+	detail *activityDetail
 
 	// Models
 	inflight           []api.InflightRequestEntry
@@ -368,6 +387,27 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ActivityPageFetchedMsg:
 		m.activityPage = msg.page
+		m.syncDetailWithPage()
+		return m, nil
+
+	case CaptureFetchedMsg:
+		// Ignore stale fetches: the detail may have been closed, or the
+		// user may have opened another row while this one was in flight.
+		if m.detail == nil || msg.entryID != m.detail.entryID || msg.captureID != m.detail.captureID {
+			return m, nil
+		}
+		m.detail.loading = false
+		if msg.err != nil {
+			var httpErr *api.HTTPError
+			if errors.As(msg.err, &httpErr) && httpErr.StatusCode == http.StatusNotFound {
+				// The capture was pruned between listing and fetching.
+				m.detail.pruned = true
+			} else {
+				m.detail.err = msg.err.Error()
+			}
+			return m, nil
+		}
+		m.detail.prompts = parseCapture(*msg.capture)
 		return m, nil
 
 	case HardwareFetchedMsg:
@@ -626,6 +666,19 @@ func (m *Model) fetchActivityPage() tea.Cmd {
 			return FetchErrMsg{err: fmt.Errorf("fetch activity page: %w", err)}
 		}
 		return ActivityPageFetchedMsg{page: *result}
+	}
+}
+
+// fetchCapture fetches a request/response capture for the detail panel.
+// The entry and capture ID are captured on the UI goroutine so the Cmd
+// closure reads no shared state.
+func (m *Model) fetchCapture(entry api.ActivityLogEntry) tea.Cmd {
+	entryID, captureID := entry.ID, entry.CaptureID
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		cap, err := m.client.GetCapture(ctx, captureID)
+		return CaptureFetchedMsg{entryID: entryID, captureID: captureID, capture: cap, err: err}
 	}
 }
 
@@ -933,6 +986,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// The tab may change below; the detail panel belongs to the
+	// Activity tab, so leaving it closes the panel.
+	prevTab := m.tab
+
 	switch msg.String() {
 	case "q", "ctrl+c":
 		m.closeSSE()
@@ -1023,7 +1080,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "j", "down":
 		switch m.tab {
 		case tabActivity:
-			m.modelActivityScrollDown()
+			m.activitySelectDown()
 		case tabHardware:
 			m.vp.ScrollDown(1)
 		case tabLogs:
@@ -1036,7 +1093,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "k", "up":
 		switch m.tab {
 		case tabActivity:
-			m.modelActivityScrollUp()
+			m.activitySelectUp()
 		case tabHardware:
 			m.vp.ScrollUp(1)
 		case tabLogs:
@@ -1046,10 +1103,17 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case tabProfiles:
 			m.profileScrollUp()
 		}
+	case "esc":
+		if m.detail != nil {
+			m.closeActivityDetail()
+			return m, nil
+		}
 	case "enter":
 		switch m.tab {
 		case tabProfiles:
 			return m, m.switchSelectedProfile()
+		case tabActivity:
+			return m, m.toggleActivityDetail()
 		}
 	case "right":
 		if m.tab == tabActivity {
@@ -1061,6 +1125,11 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.hScrollOffset = max(0, m.hScrollOffset-10)
 		}
 		return m, nil
+	}
+
+	// Leaving the Activity tab closes the expanded capture panel.
+	if m.tab != prevTab {
+		m.closeActivityDetail()
 	}
 
 	return m, nil
@@ -1240,7 +1309,7 @@ func (m *Model) renderHelpOverlay() string {
 				"  r                Refresh current tab\n" +
 				"  1-5              Switch tabs\n" +
 				"  tab / shift+tab  Next / prev tab\n\n" +
-				"  Activity (2):  j/k scroll  pgup/pgdown pages\n" +
+				"  Activity (2):  j/k select row  enter=details  pgup/pgdown pages\n" +
 				"  Models (3):    j/k navigate  l=load  L=name  u=unload  x=cancel\n" +
 				"                  pgup/pgdown scroll activity rows\n" +
 				"  Hardware (4):  j/k scroll  pgup/pgdown pages  r refresh\n" +

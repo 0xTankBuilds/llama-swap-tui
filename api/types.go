@@ -79,18 +79,23 @@ type TokenMetrics struct {
 
 // ActivityLogEntry is a single row in the activity log.
 type ActivityLogEntry struct {
-	ID              int               `json:"id"`
-	Timestamp       time.Time         `json:"timestamp"`
-	Src             string            `json:"src"`
-	Model           string            `json:"model"`
-	ReqPath         string            `json:"req_path"`
-	RespContentType string            `json:"resp_content_type"`
-	RespStatusCode  int               `json:"resp_status_code"`
-	Tokens          TokenMetrics      `json:"tokens"`
-	DurationMs      int               `json:"duration_ms"`
-	HasCapture      bool              `json:"has_capture"`
-	ErrorMsg        string            `json:"error_msg,omitempty"`
-	Metadata        map[string]string `json:"metadata,omitempty"`
+	ID              int          `json:"id"`
+	Timestamp       time.Time    `json:"timestamp"`
+	Src             string       `json:"src"`
+	Model           string       `json:"model"`
+	ReqPath         string       `json:"req_path"`
+	RespContentType string       `json:"resp_content_type"`
+	RespStatusCode  int          `json:"resp_status_code"`
+	Tokens          TokenMetrics `json:"tokens"`
+	DurationMs      int          `json:"duration_ms"`
+	HasCapture      bool         `json:"has_capture"`
+	// CaptureID names this row's request/response capture, or is empty
+	// when none was taken. It is a string ID (yymmddhh-XXXX), not the
+	// row's numeric ID: the server validates the ID shape, so fetching
+	// a capture by row ID is rejected.
+	CaptureID string            `json:"capture_id,omitempty"`
+	ErrorMsg  string            `json:"error_msg,omitempty"`
+	Metadata  map[string]string `json:"metadata,omitempty"`
 }
 
 // ActivityPage is a paginated response from GET /api/metrics/activity.

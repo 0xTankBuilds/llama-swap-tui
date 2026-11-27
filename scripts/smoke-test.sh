@@ -145,6 +145,19 @@ tmux send-keys -t "$SESSION" "5"
 sleep 1
 check "Logs tab shows mock log line" capture_contains "smoke log line 1"
 
+# --- Activity capture detail ------------------------------------------------
+tmux send-keys -t "$SESSION" "2"
+sleep 1
+check "Activity tab lists mock model row" capture_contains "smoke-gemma"
+tmux send-keys -t "$SESSION" "Enter"
+sleep 2
+check "detail shows input prompt" capture_contains "smoke test prompt"
+check "detail shows output" capture_contains "smoke test reply"
+check "detail shows section labels" capture_contains "Input prompt"
+tmux send-keys -t "$SESSION" "Escape"
+sleep 1
+check "detail closes on Esc" capture_lacks "smoke test prompt"
+
 # --- Clean quit ---------------------------------------------------------------
 tmux send-keys -t "$SESSION" "q"
 QUIT=0
